@@ -10,6 +10,7 @@ Example split and stitch boundaries for N = 3 implimentation, where N refers to 
 
 The current version supports clustering with:
 - HDBSCAN
+> McInnes L, Healy J. Accelerated Hierarchical Density Based Clustering In: 2017 IEEE International Conference on Data Mining Workshops (ICDMW), IEEE, pp 33-42. 2017
 
 With the ability to split and stitch data while clustering independently if alternative methods are preferred.
 
@@ -23,6 +24,17 @@ Demonstrates in detail the processes involved with HEADSS and how to extract the
 
 ### quick_start.ipynb
 Demonstrates a quick use implimentation to explore the algorithm. A number of example datasets are included and can be called using the provided function or the user can provide thier own.
+
+#### Example usage using a dataset:
+```
+merge = headss_merge(df = data, N = 2, split_columns = ['x', 'y'], merge = True,
+                      cluster_columns=['x','y'], min_cluster_size = 10, 
+                      min_samples = 10, cluster_method = 'leaf', allow_single_cluster = False,
+                 total_threshold = 0.1, overlap_threshold = 0.5, minimum_members = 10) 
+
+# clustering result
+merged_df = merge.members_df
+```
 
 ### eval.ipynb
 Demonstrate the performance on all example datasets, producing the plots found in the paper.
