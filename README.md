@@ -12,7 +12,7 @@ The current version supports clustering with:
 - HDBSCAN
 > McInnes L, Healy J. Accelerated Hierarchical Density Based Clustering In: 2017 IEEE International Conference on Data Mining Workshops (ICDMW), IEEE, pp 33-42. 2017
 
-With the ability to split and stitch data while clustering independently if alternative methods are preferred.
+With the ability to split and stitch data while clustering independently if alternative clustering methods are preferred.
 
 ## Notebooks included are: 
 - Train.ipynb
