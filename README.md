@@ -32,18 +32,18 @@ conda env create -f environment.yml
 If hdbscan is not present simply install after entering the environment using:
 ```pip install hdbscan```
 
-> Notebooks included are: 
+## Notebooks included are: 
 - Train.ipynb
 - quick_start.ipynb
 - eval.ipynb
 
-> ### Train.ipynb
-> Demonstrates in detail the processes involved with HEADSS and how to extract the split/stitching process to use an alternative clustering algorithm to HDBSCAN.
+### Train.ipynb
+Demonstrates in detail the processes involved with HEADSS and how to extract the split/stitching process to use an alternative clustering algorithm to HDBSCAN.
 
-> quick_start.ipynb
+### quick_start.ipynb
 Demonstrates a quick use implimentation to explore the algorithm. A number of example datasets are included and can be called using the provided function or the user can provide thier own.
 
-> ### eval.ipynb
+### eval.ipynb
 Demonstrate the performance on all example datasets, producing the plots found in the paper.
 
 ## Contributing
