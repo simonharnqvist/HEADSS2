@@ -39,6 +39,10 @@ merged_df = merge.members_df
 ### eval.ipynb
 Demonstrate the performance on all example datasets, producing the plots found in the paper.
 
+## Intallation
+
+To be made available using pip or conda.
+
 ## Requirements
 
 All workbooks are `.ipynb`, however HEADSS itself is simply `.py` and can be used provided the requirements are correctly installed.
