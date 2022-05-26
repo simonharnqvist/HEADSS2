@@ -60,4 +60,10 @@ If hdbscan is not present simply install after entering the environment using:
 
 ## Contributing
 
+We welcome contributions in any form but particuarly with implementations of additional clustering algorithms. To contribute please fork the project and submit a pull request. Any assistance with formatting, syntax or anything else feel free to contact the authors.
+
+## Licensing
+
+The hdbscan package is 3-clause BSD licensed.
+
 >  BSD licence and contact the authors for details on contributing to this code.
