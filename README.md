@@ -25,7 +25,7 @@ Demonstrates in detail the processes involved with HEADSS and how to extract the
 ### quick_start.ipynb
 Demonstrates a quick use implimentation to explore the algorithm. A number of example datasets are included and can be called using the provided function or the user can provide thier own.
 
-#### Example usage using a dataset:
+#### Example usage with data as a DataFrame:
 ```
 merge = headss_merge(df = data, N = 2, split_columns = ['x', 'y'], merge = True,
                       cluster_columns=['x','y'], min_cluster_size = 10, 
