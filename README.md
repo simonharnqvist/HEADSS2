@@ -41,7 +41,7 @@ Demonstrate the performance on all example datasets, producing the plots found i
 
 ## Intallation
 
-To be made available using pip or conda.
+To be made available using pip or conda. For now, use the provided requirements.txt or environment.yml files.
 
 ## Requirements
 
