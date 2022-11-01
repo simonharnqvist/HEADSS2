@@ -59,7 +59,7 @@ To set up an environment:
 conda env create -f environment.yml
 ```
 
-If hdbscan is not present simply install after entering the environment using:
+In some cases hdbscan is not properly installed, if this occurs please install manually after entering the environment using:
 ```pip install hdbscan```
 
 ## Contributing
