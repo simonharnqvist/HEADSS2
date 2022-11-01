@@ -469,7 +469,7 @@ class headss_regions(headss_plotting):
         for i, tmp_df in enumerate(members):
             if add_pos:
                 tmp_df[pos_name] = i
-            members_df = members_df.append(tmp_df, ignore_index = True)
+            members_df = pd.concat([members_df, tmp_df], ignore_index = True)
         return members_df
     
     def splitData(self):
@@ -644,7 +644,7 @@ class headss_stitching(headss_hdbscan):
                                     self.stitch_regions.loc[index][f'{col}_max']))
                                         for i, col in enumerate(self.split_columns)], 
                                             axis = 0)]
-            res = res.append(center, ignore_index = True)
+            res = pd.concat([res,center], ignore_index = True)
         return res
                 
     def calculateCenters(self, data):
