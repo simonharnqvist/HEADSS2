@@ -3,7 +3,7 @@ HiErArchical Data Splitting and Stitching Software for Non-Distributed Clusterin
 
 HEADSS represents a process of splitting big data to avoid the introduction of edge effects and formalise the stitching process to provide a complete feature space. The process is shown (below) with a number of example notebooks for examples of how to use, highlighting best practices and implimentations to avoid.
 
-Example split and stitch boundaries for N = 3 implimentation, where N refers to the number of cuts in the base layer.
+Example split and stitch boundaries for N = 3 implimentation, where N refers to the number of cuts in each feature in the base layer.
 ![3x3_split](https://user-images.githubusercontent.com/84581147/170474116-5f718b98-618d-4d61-a95c-c1c7a8012f57.png)
 <!-- ![3x3_stitch](https://user-images.githubusercontent.com/84581147/170474111-fe226e70-14d4-4408-b4f0-61451f06b48a.png) -->
 <img src="https://user-images.githubusercontent.com/84581147/170474111-fe226e70-14d4-4408-b4f0-61451f06b48a.png" width="250" height="250">
