@@ -196,5 +196,4 @@ def make_regions(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> Re
 
 def region_partition(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> dd.DataFrame:
     regions_obj = make_regions(df=df, n_cubes=n_cubes, split_columns=split_columns)
-    ddf = dd.from_pandas(regions_obj.split_data)
-    return partition_by_region(df = ddf)
+    return partition_by_region(df = regions_obj.split_data)
