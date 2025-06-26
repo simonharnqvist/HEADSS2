@@ -13,7 +13,10 @@ def spiral_stitching_result():
     return pd.read_csv("tests/ground_truth/spiral_stitching_result.csv")
 
 def test_flame_stitching_consistent(flame_clustered, flame_stitching_result):
-    actual = stitching.stitch(regions = flame_clustered, split_columns=["x", "y"]) 
+
+    regions_data, stitching_data = flame_clustered
+
+    actual = stitching.stitch(regions = regions_data, split_columns=["x", "y"], stitch_regions=stitching_data) 
     expected = flame_stitching_result()
     
     pd.testing.assert_frame_equal(
@@ -24,7 +27,10 @@ def test_flame_stitching_consistent(flame_clustered, flame_stitching_result):
     ## this will most likely fail since clustering is not deterministic  - compare dimensions? Or check that the error is what is expected?
 
 def test_spiral_stitching_consistent(spiral_clustered, spiral_stitching_result):
-    actual = stitching.stitch(regions = spiral_clustered, split_columns=["x", "y"]) 
+
+    regions_data, stitching_data = spiral_clustered
+
+    actual = stitching.stitch(regions = regions_data, split_columns=["x", "y"], stitch_regions=stitching_data) 
     expected = spiral_stitching_result()
     
     pd.testing.assert_frame_equal(

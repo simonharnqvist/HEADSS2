@@ -46,7 +46,7 @@ def spiral_regions(spiral_data):
 
 def test_flame_regions_match_ground_truth(flame_regions_ground_truth, flame_regions):
     expected = flame_regions_ground_truth.copy()
-    actual = flame_regions.split_data.copy()
+    actual = flame_regions.split_data.compute().copy()
 
     expected.columns = expected.columns.map(str)
     actual.columns = actual.columns.map(str)

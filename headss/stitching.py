@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import List, Union, Any
+import dask.dataframe as dd
 
 def calculate_centers(data: pd.DataFrame, split_columns: List[str]) -> pd.DataFrame:
     """Calculate the median center and size for each cluster."""
@@ -14,11 +15,16 @@ def calculate_centers(data: pd.DataFrame, split_columns: List[str]) -> pd.DataFr
         records.append(center)
     return pd.DataFrame(records)
 
-def get_all_centers(regions: List[pd.DataFrame], split_columns: List[str], n_regions: int) -> np.ndarray:
-    """Aggregate cluster centers for all regions."""
+def get_all_centers(regions: dd.DataFrame, split_columns: List[str], n_regions: int) -> np.ndarray:
     centers = np.empty(n_regions, dtype=object)
-    for i, region_df in enumerate(regions):
+
+    # Pull grouped region data into Pandas
+    regions_pd = regions.groupby('region').apply(lambda df: df, meta=regions)._meta_nonempty
+    grouped = regions.groupby('region').apply(lambda x: x, meta=regions_pd).compute()
+
+    for i, (_, region_df) in enumerate(grouped.groupby('region')):
         centers[i] = calculate_centers(region_df, split_columns)
+
     return centers
 
 def cut_misplaced_clusters(centers: np.ndarray, stitch_regions: pd.DataFrame, split_columns: List[str]) -> pd.DataFrame:
@@ -36,22 +42,24 @@ def cut_misplaced_clusters(centers: np.ndarray, stitch_regions: pd.DataFrame, sp
     return pd.concat(valid_centers, ignore_index=True)
 
 def stitch_clusters(
-    regions: List[pd.DataFrame],
+    regions: dd.DataFrame,
     centers: np.ndarray,
     stitch_regions: pd.DataFrame,
     split_columns: List[str]
-) -> pd.DataFrame:
-    """Combine all regions and remove clusters outside stitching bounds."""
+) -> dd.DataFrame:
+    """Filter regions to include only valid clusters based on their center positions."""
     valid_clusters = cut_misplaced_clusters(centers, stitch_regions, split_columns)
-    combined = pd.concat(regions, ignore_index=True)
-    return combined[combined['group'].isin(valid_clusters['group'])]
+    valid_group_ids = valid_clusters["group"].dropna().unique().tolist()
+
+    # Filter the Dask DataFrame based on valid group labels
+    return regions[regions["group"].isin(valid_group_ids)]
 
 def stitch(
-    regions: List[pd.DataFrame],
+    regions: dd.DataFrame,
     split_columns: List[str],
     stitch_regions: pd.DataFrame
-) -> pd.DataFrame:
-    """Main stitching pipeline."""
-    n_regions = len(regions)
+) -> dd.DataFrame:
+    """Main stitching pipeline with Dask support."""
+    n_regions = regions.npartitions
     centers = get_all_centers(regions, split_columns, n_regions)
     return stitch_clusters(regions, centers, stitch_regions, split_columns)

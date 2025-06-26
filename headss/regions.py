@@ -172,6 +172,8 @@ class Regions:
     split_regions: pd.DataFrame
     stitch_regions: pd.DataFrame
 
+def region_partition(split_data: pd.DataFrame) -> dd.DataFrame:
+    return partition_by_region(split_data)
 
 def make_regions(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> Regions:
     """
@@ -188,12 +190,13 @@ def make_regions(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> Re
     low_cuts = get_minima(limits, step=step)
     high_cuts = get_maxima(limits, step=step)
 
-    split_data = get_split_data(df, n_regions=n_regions, limits=limits, split_columns=split_columns, step=step)
+    split_data = region_partition(get_split_data(df, 
+                                                 n_regions=n_regions, 
+                                                 limits=limits, 
+                                                 split_columns=split_columns, 
+                                                 step=step))
     split_regions = get_split_regions(limits=limits, split_columns=split_columns, step=step)
     stitch_regions = get_stitch_regions(low_cuts=low_cuts, high_cuts=high_cuts, split_columns=split_columns)
 
     return Regions(split_data=split_data, split_regions=split_regions, stitch_regions=stitch_regions)
 
-def region_partition(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> dd.DataFrame:
-    regions_obj = make_regions(df=df, n_cubes=n_cubes, split_columns=split_columns)
-    return partition_by_region(df = regions_obj.split_data)
