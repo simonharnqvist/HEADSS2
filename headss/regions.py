@@ -3,6 +3,8 @@ import numpy as np
 import itertools
 from dataclasses import dataclass
 from typing import List
+from headss.partition import partition_by_region
+import dask.dataframe as dd
 
 
 def cut_df_by_region(df: pd.DataFrame, minima: np.ndarray, split_columns: List[str], step: np.ndarray) -> pd.DataFrame:
@@ -191,3 +193,8 @@ def make_regions(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> Re
     stitch_regions = get_stitch_regions(low_cuts=low_cuts, high_cuts=high_cuts, split_columns=split_columns)
 
     return Regions(split_data=split_data, split_regions=split_regions, stitch_regions=stitch_regions)
+
+def region_partition(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> dd.DataFrame:
+    regions_obj = make_regions(df=df, n_cubes=n_cubes, split_columns=split_columns)
+    ddf = dd.from_pandas(regions_obj.split_data)
+    return partition_by_region(df = ddf)
