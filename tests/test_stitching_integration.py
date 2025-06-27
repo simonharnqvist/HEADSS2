@@ -1,23 +1,39 @@
 import pytest
 import pandas as pd
-
+import dask.dataframe as dd
 from headss import datasets, cluster, stitching
-from dataset_fixtures import a3_clustered
 
 @pytest.fixture
-def a3_stitching_result():
-    return pd.read_csv("tests/ground_truth/a3_stitching_result.csv", index_col=0).set_index("region", drop=True).drop(columns=["index"])
+def a3_clustered():
+    return pd.read_csv("tests/ground_truth/a3_clustered.csv", index_col=0).set_index("region", drop=True).drop(columns=["index"])
 
-def test_flame_stitching_consistent(a3_clustered, a3_stitching_result):
-    regions_data, stitching_data = a3_clustered
+@pytest.fixture
+def a3_stitch_regions():
+    return pd.read_csv("tests/ground_truth/a3_stitch_regions.csv", index_col=0)
 
-    actual = stitching.stitch(regions = regions_data, split_columns=["x", "y"], stitch_regions=stitching_data).compute()
-    expected = a3_stitching_result
+@pytest.fixture
+def a3_stitched():
+    return pd.read_csv("tests/ground_truth/a3_stitched.csv", index_col=0)
 
-    with pytest.raises(AssertionError): #dataframes expected to be different, but columns etc should match
+def test_stitching_a3(a3_clustered, a3_stitch_regions, a3_stitched):
+
+    actual = stitching.stitch(regions=dd.from_pandas(a3_clustered, npartitions=1), 
+        split_columns=["x", "y"], stitch_regions=a3_stitch_regions).compute()
     
-        pd.testing.assert_frame_equal(
-            expected, actual,
-            check_dtype=False,
-            check_index_type=False
-        )
+    expected = a3_stitched.copy()
+
+    expected.columns = expected.columns.map(str)
+    actual.columns = actual.columns.map(str)
+
+    columns_to_check = ['x', 'y', 'region', 'group']
+    actual["region"] = actual.index
+    actual = actual.reset_index(drop=True)
+
+    expected_subset = expected[columns_to_check].sort_values(by=columns_to_check).reset_index(drop=True)
+    actual_subset = actual[columns_to_check].sort_values(by=columns_to_check).reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(
+        expected_subset,
+        actual_subset,
+        check_dtype=False,
+    )
