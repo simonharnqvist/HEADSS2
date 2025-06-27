@@ -14,7 +14,7 @@ def run_hdbscan(df: pd.DataFrame,
                                 cluster_selection_method=cluster_method,
                                 gen_min_span_tree=False).fit(df[cluster_columns])
     
-    df.loc[:, 'group'] = clusterer.labels_ + df.loc[:, 'region'].astype("Int64")
+    df.loc[:, 'group'] = clusterer.labels_ + df.index.astype("Int64")
 
     if drop_ungrouped:
         df = df.loc[df.group!=-1, :]

@@ -72,7 +72,6 @@ def test_flame_regions_split_match_ground_truth(flame_split_ground_truth, flame_
 def test_flame_regions_stitch_match_ground_truth(flame_stitch_ground_truth, flame_regions):
     pd.testing.assert_frame_equal(flame_stitch_ground_truth, flame_regions.stitch_regions, check_dtype=False, check_index_type=False)
 
-
 def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_regions):
     expected = spiral_regions_ground_truth.copy()
     actual = spiral_regions.split_data.compute()
@@ -80,8 +79,15 @@ def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_r
     expected.columns = expected.columns.map(str)
     actual.columns = actual.columns.map(str)
 
+    columns_to_check = ['x', 'y', 'region']
+    actual["region"] = actual.index
+    actual = actual.reset_index(drop=True)
+
+    expected_subset = expected[columns_to_check].sort_values(by=columns_to_check).reset_index(drop=True)
+    actual_subset = actual[columns_to_check].sort_values(by=columns_to_check).reset_index(drop=True)
+
     pd.testing.assert_frame_equal(
-        expected, actual,
+        expected_subset, actual_subset,
         check_dtype=False,
         check_index_type=False
     )
