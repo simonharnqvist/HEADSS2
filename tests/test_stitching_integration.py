@@ -30,7 +30,7 @@ def test_spiral_stitching_consistent(spiral_clustered, spiral_stitching_result):
 
     regions_data, stitching_data = spiral_clustered
 
-    actual = stitching.stitch(regions = regions_data, split_columns=["x", "y"], stitch_regions=stitching_data) 
+    actual = stitching.stitch(regions = regions_data, split_columns=["x", "y"], stitch_regions=stitching_data)
     expected = spiral_stitching_result()
     
     pd.testing.assert_frame_equal(
