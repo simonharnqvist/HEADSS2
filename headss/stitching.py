@@ -68,22 +68,16 @@ def cut_misplaced_clusters(
     :param split_columns: List of dimensions (e.g. ['x', 'y', 'z']).
     :return: DataFrame of valid centers.
     """
-    n_centers = len(centers)
-    n_regions = len(stitch_regions)
-
-    # Create mask shape: (n_centers, n_regions), default all True
-    mask = np.ones((n_centers, n_regions), dtype=bool)
-
-    for col in split_columns:
-        col_vals = centers[col].values[:, np.newaxis]  # (n_centers, 1)
-        col_min = stitch_regions[f"{col}_mins"].values[np.newaxis, :]  # (1, n_regions)
-        col_max = stitch_regions[f"{col}_max"].values[np.newaxis, :]  # (1, n_regions)
-
-        mask &= (col_vals >= col_min) & (col_vals <= col_max)
-
-    # Keep centers that intersect at least one region
-    valid = mask.any(axis=1)
-    return centers[valid].reset_index(drop=True)
+    res = pd.DataFrame()
+    for index, center in enumerate(centers):
+        # Iterate over all centers to check it lies within the stitching map.
+        center = center[np.all([(center[col].between(
+                            stitch_regions.loc[index][f'{col}_mins'], 
+                                stitch_regions.loc[index][f'{col}_max']))
+                                    for i, col in enumerate(split_columns)], 
+                                        axis = 0)]
+        res = pd.concat([res,center], ignore_index = True)
+        return res
 
 def stitch_clusters(
     regions: dd.DataFrame,
