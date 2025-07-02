@@ -562,6 +562,8 @@ class headss_hdbscan(headss_regions):
                 drop_non_grouped = True):
         """ Cluster objects and format the results into a single dataframe.
         Updating this function allows use of other clustering algorithms"""
+
+        np.random.seed(11)
         
         clusterer = hdbscan.HDBSCAN(min_cluster_size=self.min_cluster_size,
                                     min_samples=self.min_samples,

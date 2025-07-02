@@ -17,8 +17,8 @@ def a3_stitched():
 
 def test_stitching_a3(a3_clustered, a3_stitch_regions, a3_stitched):
 
-    actual = stitching.stitch(regions=dd.from_pandas(a3_clustered, npartitions=1), 
-        split_columns=["x", "y"], stitch_regions=a3_stitch_regions).compute()
+    actual = stitching.stitch(clustered_data=dd.from_pandas(a3_clustered, npartitions=1), 
+        split_columns=["x", "y"], stitch_regions=a3_stitch_regions)
     
     expected = a3_stitched.copy()
 

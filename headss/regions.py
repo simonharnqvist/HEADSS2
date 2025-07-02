@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import itertools
-import dask.dataframe as dd
 from dataclasses import dataclass
 from typing import List
 
@@ -163,17 +162,6 @@ def get_maxima(limits: np.ndarray, step: np.ndarray) -> np.ndarray:
     return high
 
 
-def partition_by_region(df: dd.DataFrame, column: str = "region") -> dd.DataFrame:
-    """
-    Partition a Dask DataFrame by a region column using distributed shuffling.
-
-    :param df: Input Dask DataFrame.
-    :param column: Column name to partition by.
-    :return: Dask DataFrame partitioned by region.
-    """
-    return df.set_index(column, shuffle="tasks", sorted=False, drop=True)
-
-
 @dataclass
 class Regions:
     """
@@ -183,7 +171,7 @@ class Regions:
     :param split_regions: Table of region boundaries (min/max).
     :param stitch_regions: Table of stitching overlaps.
     """
-    split_data: dd.DataFrame
+    split_data: pd.DataFrame
     split_regions: pd.DataFrame
     stitch_regions: pd.DataFrame
 
@@ -203,9 +191,7 @@ def make_regions(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> Re
     low_cuts = get_minima(limits, step=step)
     high_cuts = get_maxima(limits, step=step)
 
-    split_data_pd = get_split_data(df, n_regions=n_regions, limits=limits, split_columns=split_columns, step=step)
-    split_data_dd = dd.from_pandas(split_data_pd, npartitions=n_regions)
-    split_data = partition_by_region(split_data_dd)
+    split_data = get_split_data(df, n_regions=n_regions, limits=limits, split_columns=split_columns, step=step)
 
     split_regions = get_split_regions(limits=limits, split_columns=split_columns, step=step)
     stitch_regions = get_stitch_regions(low_cuts=low_cuts, high_cuts=high_cuts, split_columns=split_columns)

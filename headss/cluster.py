@@ -1,49 +1,51 @@
 import pandas as pd
 import dask.dataframe as dd
 from hdbscan import HDBSCAN
+import numpy as np
+from dask import delayed
 
-def run_hdbscan(df: pd.DataFrame,
-            min_cluster_size:int, min_samples:int, allow_single_cluster:bool, 
-            cluster_method: str, cluster_columns:"list[str]", drop_ungrouped:bool = True) -> pd.DataFrame:
-    """ Cluster objects and format the results into a single dataframe."""
+def run_hdbscan(region_idx: int, df: pd.DataFrame,
+                min_cluster_size: int, min_samples: int, allow_single_cluster: bool, 
+                cluster_method: str, cluster_columns: list[str], drop_ungrouped: bool = True) -> pd.DataFrame:
+    """Cluster objects and format the results into a single dataframe."""
+    np.random.seed(11)
 
-    clusterer = HDBSCAN(min_cluster_size=min_cluster_size,
-                                min_samples=min_samples,
-                                prediction_data=False,
-                                allow_single_cluster=allow_single_cluster,
-                                cluster_selection_method=cluster_method,
-                                gen_min_span_tree=False).fit(df[cluster_columns])
+    clusterer = HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
+        prediction_data=False,
+        allow_single_cluster=allow_single_cluster,
+        cluster_selection_method=cluster_method,
+        gen_min_span_tree=False
+    ).fit(df[cluster_columns])
     
-    df.loc[:, 'group'] = clusterer.labels_ + df.index.astype("Int64")
+    df.loc[:, 'group'] = [
+        f"{region_idx}_{label}" if label != -1 else -1
+        for label in clusterer.labels_
+    ]
 
     if drop_ungrouped:
-        df = df.loc[df.group!=-1, :]
+        df = df[df.group != -1]
 
     return df
 
-def cluster(region_partitioned_split_data: dd.DataFrame, min_cluster_size:int, min_samples:int, allow_single_cluster:bool, 
-            cluster_method: str, cluster_columns:"list[str]", drop_ungrouped:bool = True):
-    """Perform clustering with HDBSCAN per partition (=region)
+def cluster(split_data: dd.DataFrame, 
+            min_cluster_size: int, min_samples: int, allow_single_cluster: bool, 
+            cluster_method: str, cluster_columns: list[str], drop_ungrouped: bool = True) -> dd.DataFrame:
+    """Perform clustering with HDBSCAN per partition (=region), prefixing group with partition index."""
 
-    Args:
-        region_partitioned_split_data (dd.DataFrame): _description_
-        min_cluster_size (int): _description_
-        min_samples (int): _description_
-        allow_single_cluster (bool): _description_
-        cluster_method (str): _description_
-        cluster_columns (list[str]): _description_
-        drop_ungrouped (bool, optional): _description_. Defaults to True.
+    result_df = pd.concat([
+        run_hdbscan(
+            region_idx=i,
+            df=group.copy(),
+            min_cluster_size=min_cluster_size,
+            min_samples=min_samples,
+            allow_single_cluster=allow_single_cluster,
+            cluster_method=cluster_method,
+            cluster_columns=cluster_columns,
+            drop_ungrouped=drop_ungrouped
+        )
+        for i, (_, group) in enumerate(split_data.groupby('region'))
+    ], ignore_index=True)
 
-    Returns:
-        _type_: _description_
-    """
-    
-    return region_partitioned_split_data.map_partitions(run_hdbscan, 
-                                                 min_cluster_size = min_cluster_size, 
-                                                 min_samples = min_samples, 
-                                                 allow_single_cluster = allow_single_cluster,
-                                                 cluster_method = cluster_method, 
-                                                 cluster_columns = cluster_columns, 
-                                                 drop_ungrouped = drop_ungrouped)
-
-
+    return result_df

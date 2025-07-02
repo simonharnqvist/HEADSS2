@@ -59,7 +59,7 @@ def a3_stitch_ground_truth():
 
 def test_flame_regions_match_ground_truth(flame_regions_ground_truth, flame_regions):
     expected = flame_regions_ground_truth.copy()
-    actual = flame_regions.split_data.compute().copy()
+    actual = flame_regions.split_data.copy()
 
     expected.columns = expected.columns.map(str)
     actual.columns = actual.columns.map(str)
@@ -85,7 +85,7 @@ def test_flame_regions_stitch_match_ground_truth(flame_stitch_ground_truth, flam
 
 def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_regions):
     expected = spiral_regions_ground_truth.copy()
-    actual = spiral_regions.split_data.compute()
+    actual = spiral_regions.split_data
 
     expected.columns = expected.columns.map(str)
     actual.columns = actual.columns.map(str)
