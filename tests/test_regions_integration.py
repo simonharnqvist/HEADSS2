@@ -35,12 +35,20 @@ def spiral_data():
     return pd.read_csv("example_data/spiral.csv", header=None, usecols=[0,1,2]).rename(columns = {0:'x', 1:'y'})
 
 @pytest.fixture
+def a3_data():
+    return pd.read_csv("example_data/a3.csv", header=None, usecols=[0,1]).rename(columns = {0:'x', 1:'y'})
+
+@pytest.fixture
 def flame_regions(flame_data):
     return regions.make_regions(n_cubes = 2, df = flame_data, split_columns=['x','y'])
 
 @pytest.fixture
 def spiral_regions(spiral_data):
     return regions.make_regions(n_cubes = 2, df = spiral_data, split_columns=['x','y'])
+
+@pytest.fixture
+def a3_regions(a3_data):
+    return regions.make_regions(n_cubes = 2, df = a3_data, split_columns=['x','y'])
 
 @pytest.fixture
 def a3_stitch_ground_truth():
@@ -68,8 +76,6 @@ def test_flame_regions_match_ground_truth(flame_regions_ground_truth, flame_regi
         actual_subset,
         check_dtype=False,
     )
-
-
 
 def test_flame_regions_split_match_ground_truth(flame_split_ground_truth, flame_regions):
     pd.testing.assert_frame_equal(flame_split_ground_truth, flame_regions.split_regions, check_dtype=False, check_index_type=False)    
@@ -102,6 +108,5 @@ def test_spiral_regions_split_match_ground_truth(spiral_split_ground_truth, spir
 def test_spiral_regions_stitch_match_ground_truth(spiral_stitch_ground_truth, spiral_regions):
     pd.testing.assert_frame_equal(spiral_stitch_ground_truth, spiral_regions.stitch_regions, check_dtype=False, check_index_type=False)
 
-
-def test_a3_stitch_regions(a3_stitch_ground_truth):
-    return False # need to find out why stitch regions don't match
+def test_a3_stitch_regions_match_ground_truth(a3_stitch_ground_truth, a3_regions):
+    pd.testing.assert_frame_equal(a3_stitch_ground_truth, a3_regions.stitch_regions, check_dtype=False, check_index_type=False)

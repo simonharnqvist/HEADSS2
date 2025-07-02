@@ -15,7 +15,6 @@ def a3_centers():
 def a3_stitch_regions():
     return pd.read_csv("tests/ground_truth/a3_stitch_regions.csv", index_col=0)
 
-
 def test_centers(a3_clustered, a3_centers):
     actual = stitching.get_all_centers(
         dd.from_pandas(a3_clustered, npartitions=1), 
