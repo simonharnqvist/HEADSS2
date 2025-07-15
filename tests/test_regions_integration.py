@@ -65,7 +65,6 @@ def test_flame_regions_match_ground_truth(flame_regions_ground_truth, flame_regi
     actual.columns = actual.columns.map(str)
 
     columns_to_check = ['x', 'y', 'region']
-    actual["region"] = actual.index
     actual = actual.reset_index(drop=True)
 
     expected_subset = expected[columns_to_check].sort_values(by=columns_to_check).reset_index(drop=True)
@@ -91,7 +90,6 @@ def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_r
     actual.columns = actual.columns.map(str)
 
     columns_to_check = ['x', 'y', 'region']
-    actual["region"] = actual.index
     actual = actual.reset_index(drop=True)
 
     expected_subset = expected[columns_to_check].sort_values(by=columns_to_check).reset_index(drop=True)

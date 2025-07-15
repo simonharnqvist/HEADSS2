@@ -15,8 +15,8 @@ def calculate_centers(clustered_data: pd.DataFrame, split_columns: List[str]) ->
     if clustered_data.empty:
         raise ValueError("Empty dataframe")
     if "group" not in clustered_data.columns:
-        raise IndexError("Column 'group' not in dataframe")    
-
+        raise KeyError("Column 'group' not in dataframe")
+    
     # Drop NA values in group column to avoid sort issues
     groups = clustered_data['group'].dropna().unique()
     records = []
@@ -35,10 +35,16 @@ def calculate_centers(clustered_data: pd.DataFrame, split_columns: List[str]) ->
     if not records:
         return pd.DataFrame(columns=split_columns + ['N', 'group'])
 
-    return pd.concat(records)
+    res = pd.concat(records)
+
+    if "N" not in res.columns:
+        raise KeyError("Column 'N' not in dataframe")
+
+    return res   
 
 
-def get_centers(clustered_data: pd.DataFrame, split_columns: List[str]) -> pd.DataFrame:
+
+def get_centers(clustered_data: pd.DataFrame, split_columns: List[str]) -> List[pd.DataFrame]:
     """
     Compute the center of each cluster using group-wise median and attach group labels.
 
@@ -67,19 +73,20 @@ def cut_misplaced_clusters(
 
     res = pd.DataFrame()
     for index, center in enumerate(centers):
+        assert isinstance(center, pd.DataFrame)
         # Iterate over all centers to check it lies within the stitching map.
-        center = center[np.all([(center[col].between(
+        center_transformed: pd.DataFrame = pd.DataFrame(center[np.all([(center.loc[:, col].between(
                                 stitch_regions.loc[index][f'{col}_mins'], 
                                     stitch_regions.loc[index][f'{col}_max']))
                                         for i, col in enumerate(split_columns)], 
-                                            axis = 0)]
-        res = pd.concat([res,center], ignore_index = True)
+                                            axis = 0)])
+        res = pd.concat([res,center_transformed], ignore_index = True)
 
     return res
 
 def stitch_clusters(
     regions: pd.DataFrame,
-    centers: pd.DataFrame,
+    centers: List[pd.DataFrame],
     stitch_regions: pd.DataFrame,
     split_columns: List[str]
 ) -> pd.DataFrame:
