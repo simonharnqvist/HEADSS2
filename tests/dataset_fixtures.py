@@ -1,4 +1,4 @@
-from headss import datasets, regions, cluster
+from headss2 import datasets, regions, cluster
 import pytest
 
 

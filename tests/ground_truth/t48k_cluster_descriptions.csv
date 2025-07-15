@@ -1,4 +1,4 @@
-,cluster,column,count,min,max
+,group,column,count,min,max
 0,2,x,35.0,33.784,45.984001
 1,2,y,35.0,59.237999,114.748001
 2,3,x,2434.0,32.777,240.164001

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from headss import regions
+from headss2 import regions
 
 @pytest.fixture
 def flame():

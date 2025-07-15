@@ -1,36 +1,40 @@
 import pytest
 import pandas as pd
+from headss2.merging import describe_clusters, find_overlapping_clusters
+
 
 @pytest.fixture
 def t48k_clustered():
-    return pd.read_csv("tests/ground_truth/t48k_clustered.csv")
+    return pd.read_csv("tests/ground_truth/t48k_clustered.csv").drop(columns=["Unnamed: 0"])
 
+@pytest.fixture
 def t48k_split_columns():
     return ['x', 'y']
 
+@pytest.fixture
 def t48k_split_regions():
-    return pd.read_csv("tests/ground_truth/t48k_split_regions.csv")
+    return pd.read_csv("tests/ground_truth/t48k_split_regions.csv").drop(columns=["Unnamed: 0"])
 
 @pytest.fixture
 def t48k_cluster_descriptions():
-    return pd.read_csv("tests/ground_truth/t48k_cluster_descriptions.csv")
+    return pd.read_csv("tests/ground_truth/t48k_cluster_descriptions.csv").drop(columns=["Unnamed: 0"])
 
 @pytest.fixture
 def t48k_overlapping_clusters():
-    return pd.read_csv("tests/ground_truth/t48k_matches.csv")
+    return pd.read_csv("tests/ground_truth/t48k_matches.csv").drop(columns=["Unnamed: 0"])
 
 @pytest.fixture
 def t48k_cluster_oob_info():
-    return pd.read_csv("tests/ground_truth/t48k_cluster_oob_info.csv")
+    return pd.read_csv("tests/ground_truth/t48k_cluster_oob_info.csv").drop(columns=["Unnamed: 0"])
 
 @pytest.fixture
 def t48k_merged_clusters():
-    return pd.read_csv("tests/ground_truth/t48k_merged_clusters.csv")
+    return pd.read_csv("tests/ground_truth/t48k_merged_clusters.csv").drop(columns=["Unnamed: 0"])
 
 
 def test_describe_clusters(t48k_clustered, t48k_cluster_descriptions):
-    actual = describe_clusters(t48k_clustered, group_col = 'group')
-    expected = t48k_cluster_descriptions()
+    actual = describe_clusters(t48k_clustered, cluster_col = 'group')
+    expected = t48k_cluster_descriptions
 
     pd.testing.assert_frame_equal(
         expected,
@@ -40,10 +44,12 @@ def test_describe_clusters(t48k_clustered, t48k_cluster_descriptions):
     )
 
 def test_find_overlapping_clusters(t48k_overlapping_clusters, 
-                                   t48k_cluster_descriptions, 
+                                   t48k_cluster_descriptions,
                                    t48k_split_columns):
-    actual = find_overlapping_clusters(t48k_split_columns, t48k_cluster_descriptions)
-    expected = t48k_overlapping_clusters()
+    actual = find_overlapping_clusters(cluster_descriptions = t48k_cluster_descriptions, split_columns=t48k_split_columns)
+    expected = t48k_overlapping_clusters
+
+    print(actual, "\n", expected)
 
     pd.testing.assert_frame_equal(
         expected,
@@ -54,7 +60,7 @@ def test_find_overlapping_clusters(t48k_overlapping_clusters,
 
 def test_get_cluster_oob_info(t48k_clustered, t48k_cluster_oob_info, t48k_matches, t48k_split_columns):
     actual = get_cluster_oob_info(t48k_split_columns, t48k_clustered, index = t48k_matches.values[0][1], split_regions = t48k_split_regions)
-    expected = t48k_cluster_oob_info()
+    expected = t48k_cluster_oob_info
 
     pd.testing.assert_frame_equal(
         expected,
@@ -95,7 +101,7 @@ def test_check_cluster_merge(t48k_clustered, t48k_matches):
 def test_merge_overlapping_clusters(t48k_matches, t48k_clustered, t48k_merged_clusters):
     merges = test_check_cluster_merge(t48k_clustered, t48k_matches)
     actual = merge_overlapping_clusters(t48k_clustered, merges)
-    expected = t48k_merged_clusters()
+    expected = t48k_merged_clusters
 
 
     pd.testing.assert_frame_equal(

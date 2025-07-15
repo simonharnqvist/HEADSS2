@@ -1,5 +1,5 @@
 import pandas as pd
-from headss import stitching
+from headss2 import stitching
 import pytest
 import dask.dataframe as dd
 

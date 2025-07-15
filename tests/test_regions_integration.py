@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from headss import regions
+from headss2 import regions
 
 @pytest.fixture
 def flame_regions_ground_truth():

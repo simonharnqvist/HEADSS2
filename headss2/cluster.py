@@ -2,11 +2,11 @@ import pandas as pd
 import dask.dataframe as dd
 from hdbscan import HDBSCAN
 import numpy as np
-from dask import delayed
+from typing import List
 
 def run_hdbscan(region_idx: int, df: pd.DataFrame,
                 min_cluster_size: int, min_samples: int, allow_single_cluster: bool, 
-                cluster_method: str, cluster_columns: list[str], drop_ungrouped: bool = True) -> pd.DataFrame:
+                cluster_method: str, cluster_columns: List[str], drop_ungrouped: bool = True) -> pd.DataFrame:
     """Cluster objects and format the results into a single dataframe."""
     np.random.seed(11)
 
@@ -31,7 +31,7 @@ def run_hdbscan(region_idx: int, df: pd.DataFrame,
 
 def cluster(split_data: dd.DataFrame, 
             min_cluster_size: int, min_samples: int, allow_single_cluster: bool, 
-            cluster_method: str, cluster_columns: list[str], drop_ungrouped: bool = True) -> dd.DataFrame:
+            cluster_method: str, cluster_columns: List[str], drop_ungrouped: bool = True) -> dd.DataFrame:
     """Perform clustering with HDBSCAN per partition (=region), prefixing group with partition index."""
 
     result_df = pd.concat([
