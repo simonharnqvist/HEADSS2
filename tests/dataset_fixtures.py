@@ -1,4 +1,4 @@
-from headss2 import datasets, regions, cluster
+from headss2 import clustering, datasets, regions
 import pytest
 
 
@@ -6,7 +6,7 @@ import pytest
 def flame_clustered():
     df = datasets.dataset("flame")
     regions_obj = regions.make_regions(df=df, n_cubes=2, split_columns=["x", "y"])
-    return cluster.cluster(region_partitioned_split_data=regions_obj.split_data,
+    return clustering.cluster(region_partitioned_split_data=regions_obj.split_data,
                            cluster_columns=["x", "y"],
                            min_cluster_size=20, 
                            min_samples=20, 
@@ -18,7 +18,7 @@ def flame_clustered():
 def spiral_clustered():
     df = datasets.dataset("spiral")
     regions_obj = regions.make_regions(df=df, n_cubes=2, split_columns=["x", "y"])
-    return cluster.cluster(region_partitioned_split_data=regions_obj.split_data, 
+    return clustering.cluster(region_partitioned_split_data=regions_obj.split_data, 
                            cluster_columns=["x", "y"],
                            min_cluster_size=20, 
                            min_samples=20, 
@@ -30,7 +30,7 @@ def spiral_clustered():
 def a3_clustered():
     df = datasets.dataset("a3")
     regions_obj = regions.make_regions(df=df, n_cubes=2, split_columns=["x", "y"])
-    return cluster.cluster(region_partitioned_split_data=regions_obj.split_data, 
+    return clustering.cluster(region_partitioned_split_data=regions_obj.split_data, 
                            cluster_columns=["x", "y"],
                            min_cluster_size=20, 
                            min_samples=20, 
