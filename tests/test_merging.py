@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from headss2.merging import describe_clusters, find_overlapping_clusters, get_cluster_oob_info, get_cluster_oob_matches
+from headss2 import merging
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def t48k_merged_clusters():
 
 
 def test_describe_clusters(t48k_clustered, t48k_cluster_descriptions):
-    actual = describe_clusters(t48k_clustered, cluster_col = 'group')
+    actual = merging.describe_clusters(t48k_clustered, cluster_col = 'group')
     expected = t48k_cluster_descriptions
 
     pd.testing.assert_frame_equal(
@@ -46,7 +46,7 @@ def test_describe_clusters(t48k_clustered, t48k_cluster_descriptions):
 def test_find_overlapping_clusters(t48k_overlapping_clusters, 
                                    t48k_cluster_descriptions,
                                    t48k_split_columns):
-    actual = find_overlapping_clusters(cluster_descriptions = t48k_cluster_descriptions, split_columns=t48k_split_columns)
+    actual = merging.find_overlapping_clusters(cluster_descriptions = t48k_cluster_descriptions, split_columns=t48k_split_columns)
     expected = t48k_overlapping_clusters
 
     pd.testing.assert_frame_equal(
@@ -57,7 +57,7 @@ def test_find_overlapping_clusters(t48k_overlapping_clusters,
     )
 
 def test_get_cluster_oob_info(t48k_clustered, t48k_cluster_oob_info, t48k_overlapping_clusters, t48k_split_columns, t48k_split_regions):
-    oob_info = get_cluster_oob_info(clustered = t48k_clustered, split_regions = t48k_split_regions, 
+    oob_info = merging.get_cluster_oob_info(clustered = t48k_clustered, split_regions = t48k_split_regions, 
                          split_columns = t48k_split_columns, cluster_index = t48k_overlapping_clusters.values[0][1])
     
     actual = oob_info[0].reset_index(drop = True)
@@ -77,7 +77,7 @@ def test_get_cluster_oob_info(t48k_clustered, t48k_cluster_oob_info, t48k_overla
 def test_get_cluster_oob_matches(t48k_clustered, t48k_split_regions, t48k_split_columns, t48k_overlapping_clusters):
 
 
-    actual = get_cluster_oob_matches(clustered = t48k_clustered, split_regions=t48k_split_regions, split_columns=t48k_split_columns, 
+    actual = merging.get_cluster_oob_matches(clustered = t48k_clustered, split_regions=t48k_split_regions, split_columns=t48k_split_columns, 
                                      cluster_indices = [val for val in t48k_overlapping_clusters.values[0]], 
                                      minimum_members = 10)
 
@@ -88,11 +88,11 @@ def test_get_cluster_oob_matches(t48k_clustered, t48k_split_regions, t48k_split_
 def test_check_merge_branches():
     dummy_cluster_merge = pd.DataFrame(
     {
-    "group1": [3, 2, 1],
-    "group2": [2, 1, 3]
+    "group1": [1, 2, 3],
+    "group2": [3, 1, 2]
     }
 )
-    actual = check_merge_branches(dummy_cluster_merge)
+    actual = merging.check_merge_branches(dummy_cluster_merge)
     expected = dummy_cluster_merge # should remain unchanged
 
     pd.testing.assert_frame_equal(
@@ -102,13 +102,23 @@ def test_check_merge_branches():
         check_index_type=False
     )
 
-def test_check_cluster_merge(t48k_clustered, t48k_overlapping_clusters):
-    actual = check_cluster_merge(t48k_clustered, t48k_overlapping_clusters)
+def test_check_cluster_merge(t48k_clustered, t48k_overlapping_clusters, t48k_split_columns, t48k_split_regions):
+    actual = merging.check_cluster_merge(clustered = t48k_clustered, 
+                                         matches = t48k_overlapping_clusters, 
+                                         split_regions=t48k_split_regions,
+                                         split_columns=t48k_split_columns,
+                                         minimum_members=10,
+                                         overlap_threshold=0.5, total_threshold=0.1)
     assert len(actual) == 0
 
-def test_merge_overlapping_clusters(t48k_overlapping_clusters, t48k_clustered, t48k_merged_clusters):
-    merges = test_check_cluster_merge(t48k_clustered, t48k_overlapping_clusters)
-    actual = merge_overlapping_clusters(t48k_clustered, merges)
+def test_merge_overlapping_clusters(t48k_overlapping_clusters, t48k_clustered, t48k_merged_clusters, t48k_split_columns, t48k_split_regions):
+    merges = merging.check_cluster_merge(clustered = t48k_clustered, 
+                                         matches = t48k_overlapping_clusters, 
+                                         split_regions=t48k_split_regions,
+                                         split_columns=t48k_split_columns,
+                                         minimum_members=10,
+                                         overlap_threshold=0.5, total_threshold=0.1)
+    actual = merging.merge_overlapping_clusters(t48k_clustered, merges)
     expected = t48k_merged_clusters
 
 
