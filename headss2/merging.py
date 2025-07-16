@@ -3,13 +3,13 @@ from typing import List, Tuple
 import numpy as np
 
 
-def describe_clusters(clustered: pd.DataFrame, cluster_col:str = 'group') -> pd.DataFrame:
+def describe_clusters(clustered: pd.DataFrame, clustering_columns: List[str], cluster_col:str = 'group') -> pd.DataFrame:
     """Generate summary statistics (min, max, size) per cluster"""
 
     return (
-        clustered.groupby(cluster_col)[["x", "y"]]
+        clustered.groupby(cluster_col)[clustering_columns]
         .agg(["min", "max", "count"])
-        .set_axis([f"{col}_{stat}" for col, stat in clustered.groupby(cluster_col)[["x", "y"]]
+        .set_axis([f"{col}_{stat}" for col, stat in clustered.groupby(cluster_col)[clustering_columns]
                    .agg(["min", "max", "count"]).columns], axis=1)
         .reset_index()
         .melt(id_vars=cluster_col, var_name="column_stat", value_name="value")
@@ -145,12 +145,12 @@ def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) ->
         N_clusters = len(res.group.unique())
     return res
 
-def merge_clusters(clustered: pd.DataFrame, cluster_col: str,
+def merge_clusters(clustered: pd.DataFrame, cluster_col: str, clustering_columns: List[str],
                    split_regions: pd.DataFrame, split_columns: List[str],
                    minimum_members: int = 10, overlap_threshold:float = 0.5,
                    total_threshold: float = 0.1) -> pd.DataFrame:
-    cluster_info = describe_clusters(clustered=clustered, cluster_col=cluster_col)
-    matches = find_overlapping_clusters(cluster_info = cluster_info[:], split_columns=split_columns)
+    cluster_info = describe_clusters(clustered=clustered, cluster_col=cluster_col, clustering_columns=clustering_columns)
+    matches = find_overlapping_clusters(cluster_descriptions = cluster_info[:], split_columns=split_columns)
     cluster_merges = check_cluster_merge(clustered = clustered, matches = matches, 
                                          split_regions = split_regions, 
                                          split_columns = split_columns, 
