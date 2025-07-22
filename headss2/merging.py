@@ -1,7 +1,8 @@
 import pandas as pd
 from typing import List, Tuple
 import numpy as np
-from itertools import combinations
+from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 
 def describe_clusters(clustered: pd.DataFrame, split_columns: List[str], group_col:str = 'group') -> List[int | pd.DataFrame]:
     groups = clustered[group_col].unique()
@@ -13,22 +14,28 @@ def describe_clusters(clustered: pd.DataFrame, split_columns: List[str], group_c
     return cluster_info
 
 def find_overlapping_clusters(cluster_descriptions: List[int | pd.DataFrame], split_columns: List[str]):
+    bounds = []
+    valid_indices = []
+
+    # Preprocess: Extract bounds into arrays
+    for idx, desc in enumerate(cluster_descriptions):
+        if isinstance(desc, pd.DataFrame):
+            min_vals = desc.loc['min', split_columns].values
+            max_vals = desc.loc['max', split_columns].values
+            bounds.append((min_vals, max_vals))
+            valid_indices.append(idx)
+
+    # Compare bounds using vectorized logic
     matches = []
-    for i, df1 in enumerate(cluster_descriptions):
-        if isinstance(df1, pd.DataFrame):
-            for j, df2 in enumerate(cluster_descriptions):
-                if isinstance(df2, pd.DataFrame) and i != j:
-                    overlap = np.zeros(len(split_columns))
-                    # Iterate over all axes
-                    for index,col in enumerate(split_columns): 
-                        if df2.loc['min', col] < \
-                                    df1.loc['min', col] < \
-                                        df2.loc['max', col]:
-                            overlap[index] = 1
-                    if any(overlap) == 1:
-                        matches.append((i,j))
-    matches = pd.DataFrame(matches, columns = ['group1', 'group2'])
-    return matches
+    for i, (min1, max1) in zip(valid_indices, bounds):
+        for j, (min2, max2) in zip(valid_indices, bounds):
+            if i == j:
+                continue
+            overlap = (min2 < min1) & (min1 < max2)
+            if np.any(overlap):
+                matches.append((i, j))
+
+    return pd.DataFrame(matches, columns=['group1', 'group2'])
 
 def get_cluster_oob_info(clustered: pd.DataFrame, split_regions: pd.DataFrame, 
                          split_columns: List[str], cluster_index: int) -> Tuple[pd.DataFrame, List[float]]:
@@ -64,6 +71,28 @@ def get_cluster_oob_matches(clustered: pd.DataFrame, split_regions: pd.DataFrame
     return merged.shape[0],[merged.shape[0]/cluster1.shape[0], \
                merged.shape[0]/cluster2.shape[0]]
 
+def should_merge(cluster_indices: Tuple[int], clustered: pd.DataFrame, split_regions: pd.DataFrame, 
+                 split_columns: List[str], minimum_members: int, overlap_threshold: float, total_threshold: float):
+    """Assess whether two clusters should merge"""
+    i, j = cluster_indices
+    tmp1 = clustered[clustered.group == i]
+    tmp2 = clustered[clustered.group == j]
+    if len(tmp1) == 0 or len(tmp2) == 0:
+        return None
+
+    N_merged, perc_merged = get_cluster_oob_matches(
+        clustered=clustered,
+        split_regions=split_regions,
+        split_columns=split_columns,
+        cluster_indices=[i, j],
+        minimum_members=minimum_members
+    )
+    perc_overlap = [N_merged / len(tmp1), N_merged / len(tmp2)]
+    if max(perc_merged) > overlap_threshold and max(perc_overlap) > total_threshold:
+        return [max(i, j), min(i, j)]
+    return None
+
+
 def check_merge_branches(cluster_merge):
     '''Ensures all clusters merge to the final cluster in a chain. Without this branched 
     chains can have two final nodes which do not merge'''
@@ -85,24 +114,36 @@ def check_merge_branches(cluster_merge):
     add = pd.DataFrame(add, columns = ['group1', 'group2']).drop_duplicates()
     return cluster_merge.merge(add, how = 'outer')
 
-def check_cluster_merge(clustered: pd.DataFrame, matches: pd.DataFrame, split_regions: pd.DataFrame, split_columns: pd.DataFrame, minimum_members: float, overlap_threshold: float, total_threshold: float) -> pd.DataFrame:
-    '''Checks if two clusters should merge'''
+def check_cluster_merge(clustered: pd.DataFrame, 
+                        matches: pd.DataFrame, 
+                        split_regions: pd.DataFrame, 
+                        split_columns: pd.DataFrame, 
+                        minimum_members: float, 
+                        overlap_threshold: float, 
+                        total_threshold: float) -> pd.DataFrame:
 
+    pairs = matches.values.tolist()
     cluster_merge = []
-    for (i,j) in matches[:].values:
-        tmp1 = clustered[clustered.group == i]
-        tmp2 = clustered[clustered.group == j]
-        N_merged, perc_merged = get_cluster_oob_matches(clustered=clustered, split_regions=split_regions, split_columns=split_columns, cluster_indices = [i,j], minimum_members=minimum_members)
-        if len(tmp1) == 0 or len(tmp2) == 0:
-            continue
-        else:
-            perc_overlap = [N_merged/len(tmp1),N_merged/len(tmp2)]
-            if max(perc_merged) > overlap_threshold and \
-                max(perc_overlap) > total_threshold:
-                    cluster_merge.append([max(i,j), min(i,j)])
-    cluster_merge = pd.DataFrame(cluster_merge, columns = ['group1', 'group2'])\
-                                    .drop_duplicates()
-    return check_merge_branches(cluster_merge = cluster_merge)
+
+    partial_should_merge = partial(
+        should_merge,
+        clustered=clustered,
+        split_regions=split_regions,
+        split_columns=split_columns,
+        minimum_members=minimum_members,
+        overlap_threshold=overlap_threshold,
+        total_threshold=total_threshold
+)
+
+    pairs = matches.values.tolist()
+    with ProcessPoolExecutor() as executor:
+        results = list(executor.map(partial_should_merge, pairs))
+
+    results = [res for res in results if res]
+
+    cluster_merge_df = pd.DataFrame(results, columns=['group1', 'group2']).drop_duplicates()
+    return check_merge_branches(cluster_merge_df)
+
 
 def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) -> pd.DataFrame:
     '''iterate over merge list until cluster numbers stabalise'''
@@ -126,26 +167,16 @@ def merge_clusters(clustered: pd.DataFrame, group_col: str,
                    minimum_members: int = 10, overlap_threshold:float = 0.5,
                    total_threshold: float = 0.1) -> pd.DataFrame:
     
-    with open("h2.log", "w") as log:
-        log.write("test")
-        log.flush()
-        cluster_info = describe_clusters(clustered=clustered, group_col=group_col, split_columns=split_columns)
-        log.write(f"H2 cluster info {cluster_info} \n")
-        log.flush()
-        matches = find_overlapping_clusters(cluster_descriptions = cluster_info[:], split_columns=split_columns)
-        log.write(f"H2 Overlapping clusters: {matches} \n")
-        log.flush()
-
-        cluster_merges = check_cluster_merge(clustered = clustered, matches = matches, 
+    cluster_info = describe_clusters(clustered=clustered, group_col=group_col, split_columns=split_columns)
+    matches = find_overlapping_clusters(cluster_descriptions = cluster_info[:], split_columns=split_columns)
+    cluster_merges = check_cluster_merge(clustered = clustered, matches = matches, 
                                             split_regions = split_regions, 
                                             split_columns = split_columns, 
                                             minimum_members=minimum_members, 
                                             overlap_threshold=overlap_threshold, 
                                             total_threshold=total_threshold)
         
-        log.write(f"H2 Cluster merges: {cluster_merges} \n")
-        log.flush()
-        return merge_overlapping_clusters(clustered=clustered, merges = cluster_merges).drop_duplicates()
+    return merge_overlapping_clusters(clustered=clustered, merges = cluster_merges).drop_duplicates()
 
 
 
