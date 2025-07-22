@@ -1,58 +1,34 @@
 import pandas as pd
 from typing import List, Tuple
 import numpy as np
+from itertools import combinations
 
+def describe_clusters(clustered: pd.DataFrame, split_columns: List[str], group_col:str = 'group') -> List[int | pd.DataFrame]:
+    groups = clustered[group_col].unique()
+    cluster_info = np.zeros(int(max(groups)+1), dtype = object)
+    for index, group in enumerate(groups):
+        tmp = clustered[clustered[group_col] == group]
+        cluster_info[group] = tmp.describe()[split_columns]\
+                                        .loc[['count', 'min', 'max']]
+    return cluster_info
 
-def describe_clusters(clustered: pd.DataFrame, clustering_columns: List[str], cluster_col:str = 'group') -> pd.DataFrame:
-    """Generate summary statistics (min, max, size) per cluster"""
-
-    return (
-        clustered.groupby(cluster_col)[clustering_columns]
-        .agg(["min", "max", "count"])
-        .set_axis([f"{col}_{stat}" for col, stat in clustered.groupby(cluster_col)[clustering_columns]
-                   .agg(["min", "max", "count"]).columns], axis=1)
-        .reset_index()
-        .melt(id_vars=cluster_col, var_name="column_stat", value_name="value")
-        .assign(
-            column=lambda df: df["column_stat"].str.split("_").str[0],
-            stat=lambda df: df["column_stat"].str.split("_").str[1]
-        )
-        .pivot_table(index=[cluster_col, "column"], columns="stat", values="value")
-        .reset_index()[[cluster_col, "column", "count", "min", "max"]]
-        .rename_axis(None, axis=1)
-    )
-
-def find_overlapping_clusters(cluster_descriptions: pd.DataFrame, split_columns: list) -> pd.DataFrame:
-    """Detects one-directional overlaps between cluster pairs across specified axes."""
-
-    all_matches = []
-
-    for col in split_columns:
-        axis_df = cluster_descriptions[cluster_descriptions["column"] == col]
-
-        # Cartesian product: merge clusters on current axis
-        pairs = axis_df.merge(axis_df, on="column", suffixes=("_1", "_2"))
-
-        # Keep only directional (non-self) pairs
-        pairs = pairs[pairs["group_1"] != pairs["group_2"]]
-
-        # Bounding box overlap condition
-        overlap = (
-            (pairs["min_2"] < pairs["min_1"]) &
-            (pairs["max_2"] > pairs["min_1"])
-        )
-
-        # Extract directional overlaps only (left → right)
-        matched = pairs.loc[overlap, ["group_1", "group_2"]]
-        matched.columns = ["group1", "group2"]
-        all_matches.append(matched)
-
-    # Combine all matches and remove exact duplicates (not reversed ones)
-    result = pd.concat(all_matches, ignore_index=True).drop_duplicates()
-
-    # Sort for consistent output style
-    result = result.sort_values(by=["group1", "group2"]).reset_index(drop=True)
-    return result
+def find_overlapping_clusters(cluster_descriptions: List[int | pd.DataFrame], split_columns: List[str]):
+    matches = []
+    for i, df1 in enumerate(cluster_descriptions):
+        if isinstance(df1, pd.DataFrame):
+            for j, df2 in enumerate(cluster_descriptions):
+                if isinstance(df2, pd.DataFrame) and i != j:
+                    overlap = np.zeros(len(split_columns))
+                    # Iterate over all axes
+                    for index,col in enumerate(split_columns): 
+                        if df2.loc['min', col] < \
+                                    df1.loc['min', col] < \
+                                        df2.loc['max', col]:
+                            overlap[index] = 1
+                    if any(overlap) == 1:
+                        matches.append((i,j))
+    matches = pd.DataFrame(matches, columns = ['group1', 'group2'])
+    return matches
 
 def get_cluster_oob_info(clustered: pd.DataFrame, split_regions: pd.DataFrame, 
                          split_columns: List[str], cluster_index: int) -> Tuple[pd.DataFrame, List[float]]:
@@ -137,7 +113,7 @@ def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) ->
     
     # Iterate until all chains are followed through
     while N_clusters != N_clusters_pre:
-        N_clusters_pre = len(clustered.group.unique())
+        N_clusters_pre = len(res.group.unique())
         for k in merges.values:
             i,j = min(k), max(k)
             # Move all clusters to max label to directionise the merges.
@@ -145,19 +121,31 @@ def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) ->
         N_clusters = len(res.group.unique())
     return res
 
-def merge_clusters(clustered: pd.DataFrame, cluster_col: str, clustering_columns: List[str],
+def merge_clusters(clustered: pd.DataFrame, group_col: str,
                    split_regions: pd.DataFrame, split_columns: List[str],
                    minimum_members: int = 10, overlap_threshold:float = 0.5,
                    total_threshold: float = 0.1) -> pd.DataFrame:
-    cluster_info = describe_clusters(clustered=clustered, cluster_col=cluster_col, clustering_columns=clustering_columns)
-    matches = find_overlapping_clusters(cluster_descriptions = cluster_info[:], split_columns=split_columns)
-    cluster_merges = check_cluster_merge(clustered = clustered, matches = matches, 
-                                         split_regions = split_regions, 
-                                         split_columns = split_columns, 
-                                         minimum_members=minimum_members, 
-                                         overlap_threshold=overlap_threshold, 
-                                         total_threshold=total_threshold)
-    return merge_overlapping_clusters(clustered=clustered, merge_list = cluster_merges).drop_duplicates()
+    
+    with open("h2.log", "w") as log:
+        log.write("test")
+        log.flush()
+        cluster_info = describe_clusters(clustered=clustered, group_col=group_col, split_columns=split_columns)
+        log.write(f"H2 cluster info {cluster_info} \n")
+        log.flush()
+        matches = find_overlapping_clusters(cluster_descriptions = cluster_info[:], split_columns=split_columns)
+        log.write(f"H2 Overlapping clusters: {matches} \n")
+        log.flush()
+
+        cluster_merges = check_cluster_merge(clustered = clustered, matches = matches, 
+                                            split_regions = split_regions, 
+                                            split_columns = split_columns, 
+                                            minimum_members=minimum_members, 
+                                            overlap_threshold=overlap_threshold, 
+                                            total_threshold=total_threshold)
+        
+        log.write(f"H2 Cluster merges: {cluster_merges} \n")
+        log.flush()
+        return merge_overlapping_clusters(clustered=clustered, merges = cluster_merges).drop_duplicates()
 
 
 

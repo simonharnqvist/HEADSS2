@@ -17,7 +17,36 @@ def t48k_split_regions():
 
 @pytest.fixture
 def t48k_cluster_descriptions():
-    return pd.read_csv("tests/ground_truth/t48k_cluster_descriptions.csv").drop(columns=["Unnamed: 0"])
+    # Sample summary data
+    summary_data = pd.DataFrame({
+        "cluster": [2, 2, 3, 3, 8, 8, 17, 17, 20, 20, 28, 28, 29, 29, 30, 30, 35, 35, 39, 39],
+        "column": ["x", "y"] * 10,
+        "count": [35.0, 35.0, 2434.0, 2434.0, 3125.0, 3125.0, 956.0, 956.0, 705.0, 705.0,
+                621.0, 621.0, 43.0, 43.0, 2113.0, 2113.0, 32.0, 32.0, 652.0, 652.0],
+        "min": [33.784000, 59.237999, 32.777000, 42.812000, 64.861000, 106.042000,
+                261.179993, 38.352001, 341.269012, 96.347000, 324.967987, 232.867004,
+                586.687988, 61.516998, 460.355988, 37.678001, 463.545990, 159.522003,
+                324.967987, 232.867004],
+        "max": [45.984001, 114.748001, 240.164001, 223.873001, 318.402008, 303.213989,
+                440.354004, 160.807007, 432.454010, 245.923004, 479.851990, 287.210999,
+                619.125000, 164.901001, 581.617004, 245.738007, 478.403015, 220.684006,
+                497.927002, 290.294006]
+    })
+
+    # Group by cluster and pivot into the desired format
+    cluster_tuples = []
+    for cluster_id, group_df in summary_data.groupby("cluster"):
+        df = pd.DataFrame({
+            col: {
+                "count": group_df.loc[group_df["column"] == col, "count"].values[0],
+                "min": group_df.loc[group_df["column"] == col, "min"].values[0],
+                "max": group_df.loc[group_df["column"] == col, "max"].values[0]
+            }
+            for col in group_df["column"]
+        })
+        cluster_tuples.append((cluster_id, df))
+    
+    return cluster_tuples
 
 @pytest.fixture
 def t48k_overlapping_clusters():
@@ -33,15 +62,18 @@ def t48k_merged_clusters():
 
 
 def test_describe_clusters(t48k_clustered, t48k_cluster_descriptions):
-    actual = merging.describe_clusters(t48k_clustered, cluster_col = 'group')
+    actual = merging.describe_clusters(t48k_clustered, split_columns=["x", "y"])
     expected = t48k_cluster_descriptions
 
-    pd.testing.assert_frame_equal(
-        expected,
-        actual,
-        check_dtype=False,
-        check_index_type=False
-    )
+    assert len(expected) == len(actual), "Mismatch in number of clusters"
+
+    # Sort both lists by cluster ID to ensure consistent order
+    expected_sorted = sorted(expected, key=lambda x: x[0])
+    generated_sorted = sorted(actual, key=lambda x: x[0])
+
+    for (expected_id, expected_df), (generated_id, generated_df) in zip(expected_sorted, generated_sorted):
+        assert expected_id == generated_id, f"Cluster ID mismatch: {expected_id} != {generated_id}"
+        pd.testing.assert_frame_equal(expected_df, generated_df, check_dtype=False, check_exact=False)
 
 def test_find_overlapping_clusters(t48k_overlapping_clusters, 
                                    t48k_cluster_descriptions,
