@@ -3,8 +3,34 @@ from typing import List, Tuple
 import numpy as np
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
+import time
+import os
+import itertools
+
+
+# Define globals for parallelised work
+_clustered = None
+_split_regions = None
+_split_columns = None
+_minimum_members = None
+_overlap_threshold = None
+_total_threshold = None
+
+def init_worker(clustered, split_regions, split_columns, minimum_members, overlap_threshold, total_threshold):
+    """Initialisation function for parallelised work"""
+    global _clustered, _split_regions, _split_columns
+    global _minimum_members, _overlap_threshold, _total_threshold
+
+    _clustered = clustered
+    _split_regions = split_regions
+    _split_columns = split_columns
+    _minimum_members = minimum_members
+    _overlap_threshold = overlap_threshold
+    _total_threshold = total_threshold
+
 
 def describe_clusters(clustered: pd.DataFrame, split_columns: List[str], group_col:str = 'group') -> List[int | pd.DataFrame]:
+    """Summary statistics for each cluster."""
     groups = clustered[group_col].unique()
     cluster_info = np.zeros(int(max(groups)+1), dtype = object)
     for index, group in enumerate(groups):
@@ -14,10 +40,10 @@ def describe_clusters(clustered: pd.DataFrame, split_columns: List[str], group_c
     return cluster_info
 
 def find_overlapping_clusters(cluster_descriptions: List[int | pd.DataFrame], split_columns: List[str]):
+    """Compare bounds to find overlapping clusters."""
     bounds = []
     valid_indices = []
 
-    # Preprocess: Extract bounds into arrays
     for idx, desc in enumerate(cluster_descriptions):
         if isinstance(desc, pd.DataFrame):
             min_vals = desc.loc['min', split_columns].values
@@ -25,7 +51,6 @@ def find_overlapping_clusters(cluster_descriptions: List[int | pd.DataFrame], sp
             bounds.append((min_vals, max_vals))
             valid_indices.append(idx)
 
-    # Compare bounds using vectorized logic
     matches = []
     for i, (min1, max1) in zip(valid_indices, bounds):
         for j, (min2, max2) in zip(valid_indices, bounds):
@@ -59,60 +84,59 @@ def get_cluster_oob_matches(clustered: pd.DataFrame, split_regions: pd.DataFrame
     # Isolate target clusters
     cluster1, limits1 = get_cluster_oob_info(clustered = clustered, split_regions = split_regions, split_columns=split_columns, cluster_index=cluster_indices[0])
     cluster2, limits2 = get_cluster_oob_info(clustered = clustered, split_regions = split_regions, split_columns=split_columns, cluster_index=cluster_indices[1])
-    for i, value in enumerate(limits1): # Iterate over all axis
-        if value != limits2[i]: # Only check overlapping axis
-    #             Limit members to overlapping region
+    for i, value in enumerate(limits1):
+        if value != limits2[i]:
             cluster2 = cluster2[cluster2[split_columns[i]]>float(limits1[i][0])]
             cluster1 = cluster1[cluster1[split_columns[i]]<float(limits2[i][1])]
     if len(cluster1) <= minimum_members or len(cluster2) <= minimum_members:
         return 0, [0,0]
+    
     # merge overlapping region to check fractional matches
     merged = cluster1.merge(cluster2, how = 'inner', on = split_columns)
     return merged.shape[0],[merged.shape[0]/cluster1.shape[0], \
                merged.shape[0]/cluster2.shape[0]]
 
-def should_merge(cluster_indices: Tuple[int], clustered: pd.DataFrame, split_regions: pd.DataFrame, 
-                 split_columns: List[str], minimum_members: int, overlap_threshold: float, total_threshold: float):
+def should_merge(cluster_indices: Tuple[int]):
     """Assess whether two clusters should merge"""
     i, j = cluster_indices
-    tmp1 = clustered[clustered.group == i]
-    tmp2 = clustered[clustered.group == j]
+    tmp1 = _clustered[_clustered.group == i]
+    tmp2 = _clustered[_clustered.group == j]
     if len(tmp1) == 0 or len(tmp2) == 0:
         return None
 
     N_merged, perc_merged = get_cluster_oob_matches(
-        clustered=clustered,
-        split_regions=split_regions,
-        split_columns=split_columns,
+        clustered=_clustered,
+        split_regions=_split_regions,
+        split_columns=_split_columns,
         cluster_indices=[i, j],
-        minimum_members=minimum_members
+        minimum_members=_minimum_members
     )
     perc_overlap = [N_merged / len(tmp1), N_merged / len(tmp2)]
-    if max(perc_merged) > overlap_threshold and max(perc_overlap) > total_threshold:
+    if max(perc_merged) > _overlap_threshold and max(perc_overlap) > _total_threshold:
         return [max(i, j), min(i, j)]
     return None
 
+def cluster_merges_per_cluster(cluster:int, cluster_merges: pd.DataFrame) -> pd.DataFrame:
+    """Find clusters to merge with"""
+    subset = cluster_merges.loc[cluster_merges.group2 == cluster]
+    unique_clusters = np.unique(np.hstack((subset['group1'].unique(),(subset['group2'].unique()))))
+    return pd.DataFrame(itertools.combinations(unique_clusters, r=2), columns=["group1", "group2"])
 
-def check_merge_branches(cluster_merge):
+def cluster_merge_worker(args):
+    cluster, cluster_merges = args
+    return cluster_merges_per_cluster(cluster, cluster_merges)
+
+def check_merge_branches(cluster_merges: pd.DataFrame, n_cores:int):
     '''Ensures all clusters merge to the final cluster in a chain. Without this branched 
     chains can have two final nodes which do not merge'''
-    record = []; add = []
-    for i,j in cluster_merge.values:
-        # Avoids repeating checks
-        if j not in record:
-            record.append(j) # Update checked list
-            tmp = cluster_merge.loc[cluster_merge.group2 == j] # Get list of joined groups
-            if tmp.shape[0]>1: # If potential chain is identified
-                # Get unique gorups
-                uni = np.unique(np.hstack((tmp['group1']\
-                                                .unique(),(tmp['group2'].unique()))))
-                for i in uni:
-                    # Avoid redunency only check larger cluster numbers.
-                    for j in uni[uni>i]: 
-                        if i!=j: # Do not merge cluster to itself
-                            add.append([max(i,j), min(i,j)])
-    add = pd.DataFrame(add, columns = ['group1', 'group2']).drop_duplicates()
-    return cluster_merge.merge(add, how = 'outer')
+
+    with ProcessPoolExecutor(max_workers=n_cores) as executor:
+        clusters = np.unique(cluster_merges.values.flatten())
+        args_list = [(cluster, cluster_merges) for cluster in clusters]
+        results = list(executor.map(cluster_merge_worker, args_list))
+        results = pd.concat(results)
+
+    return cluster_merges.merge(results)
 
 def check_cluster_merge(clustered: pd.DataFrame, 
                         matches: pd.DataFrame, 
@@ -120,33 +144,28 @@ def check_cluster_merge(clustered: pd.DataFrame,
                         split_columns: pd.DataFrame, 
                         minimum_members: float, 
                         overlap_threshold: float, 
-                        total_threshold: float) -> pd.DataFrame:
+                        total_threshold: float,
+                        n_cores: int) -> pd.DataFrame:
+    """Merge clusters in parallel."""
 
     pairs = matches.values.tolist()
-    cluster_merge = []
 
-    partial_should_merge = partial(
-        should_merge,
-        clustered=clustered,
-        split_regions=split_regions,
-        split_columns=split_columns,
-        minimum_members=minimum_members,
-        overlap_threshold=overlap_threshold,
-        total_threshold=total_threshold
-)
-
-    pairs = matches.values.tolist()
-    with ProcessPoolExecutor() as executor:
-        results = list(executor.map(partial_should_merge, pairs))
+    with ProcessPoolExecutor(
+        max_workers=n_cores,
+        initializer=init_worker,
+        initargs=(clustered, split_regions, split_columns,
+                  minimum_members, overlap_threshold, total_threshold)
+    ) as executor:
+        results = list(executor.map(should_merge, pairs))
 
     results = [res for res in results if res]
-
     cluster_merge_df = pd.DataFrame(results, columns=['group1', 'group2']).drop_duplicates()
-    return check_merge_branches(cluster_merge_df)
+
+    return check_merge_branches(cluster_merge_df, n_cores=n_cores)
 
 
 def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) -> pd.DataFrame:
-    '''iterate over merge list until cluster numbers stabalise'''
+    '''Iterate over merge list until cluster numbers stabilise'''
     N_clusters = 0
     N_clusters_pre = 1
 
@@ -165,7 +184,28 @@ def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) ->
 def merge_clusters(clustered: pd.DataFrame, group_col: str,
                    split_regions: pd.DataFrame, split_columns: List[str],
                    minimum_members: int = 10, overlap_threshold:float = 0.5,
-                   total_threshold: float = 0.1) -> pd.DataFrame:
+                   total_threshold: float = 0.1,
+                   n_cores: int = 4) -> pd.DataFrame:
+    """Find clusters to merge and merge them.
+
+    Args:
+        clustered (pd.DataFrame): Clustered (and stitched, if required) data.
+        group_col (str): Column name for clustering.
+        split_regions (pd.DataFrame): Split regions from `regions` module.
+        split_columns (List[str]): Split columns from `regions` module.
+        minimum_members (int, optional): Minimum number of cluster members. Defaults to 10.
+        overlap_threshold (float, optional): Threshold for overlap. Defaults to 0.5.
+        total_threshold (float, optional): Total threshold. Defaults to 0.1.
+        n_cores (int, optional): Number of cores; -1 = all available. Defaults to 4.
+
+    Returns:
+        pd.DataFrame: Data with merged clusters.
+    """
+    
+    if n_cores == -1 or n_cores > os.cpu_count():
+        n_cores = os.cpu_count()
+    elif n_cores < 1 or not isinstance(n_cores, int):
+        n_cores = 1
     
     cluster_info = describe_clusters(clustered=clustered, group_col=group_col, split_columns=split_columns)
     matches = find_overlapping_clusters(cluster_descriptions = cluster_info[:], split_columns=split_columns)
@@ -174,7 +214,8 @@ def merge_clusters(clustered: pd.DataFrame, group_col: str,
                                             split_columns = split_columns, 
                                             minimum_members=minimum_members, 
                                             overlap_threshold=overlap_threshold, 
-                                            total_threshold=total_threshold)
+                                            total_threshold=total_threshold,
+                                            n_cores=n_cores)
         
     return merge_overlapping_clusters(clustered=clustered, merges = cluster_merges).drop_duplicates()
 
