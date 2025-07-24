@@ -60,9 +60,11 @@ merged = merging.merge_clusters(
 * Simon Harnqvist, Wide-field Astronomy Unit (WFAU), University of Edinburgh. Current maintainer and author of HEADSS2.
 * Dennis Crake, formerly of WFAU. Original author of HEADSS.
 
-## Contributing
+## Contributing, bug reports, and feature requests
 
-We welcome contributions in any form but particuarly with implementations of additional clustering algorithms. To contribute please fork the project and submit a pull request. Any assistance with formatting, syntax or anything else feel free to contact the authors.
+We welcome contributions in any form but particuarly with implementations of additional clustering algorithms. To contribute please fork the project and submit a pull request.
+
+If you have found a (potential) bug, or have ideas for improvements or extensions that you are not able to contribute via a PR, please open a GitHub issue.
 
 ## Citation
 If using HEADSS2, please cite both this repository and Dennis' <i>Astronomy and Computing</i> paper below for the algorithm and original implementation:
