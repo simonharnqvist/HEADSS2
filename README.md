@@ -1,70 +1,74 @@
-# HEADSS
-HiErArchical Data Splitting and Stitching Software for Non-Distributed Clustering Algorithms
+# HEADSS2
+This is the new version of HEADSS: HiErArchical Data Splitting and Stitching Software for Non-Distributed Clustering Algorithms. HEADSS2 provides a more predicable API, and enables parallelisation of the most compute-intense steps of the algorithm.
+
+## HEADSS
 
 HEADSS represents a process of splitting big data to avoid the introduction of edge effects and formalise the stitching process to provide a complete feature space. The process is shown (below) with a number of example notebooks for examples of how to use, highlighting best practices and implimentations to avoid.
 
-Example split and stitch boundaries for N = 3 implimentation, where N refers to the number of cuts in each feature in the base layer.
+Example split and stitch boundaries for n = 3 implimentation, where n refers to the number of cuts in each feature in the base layer.
 ![3x3_split](https://user-images.githubusercontent.com/84581147/170474116-5f718b98-618d-4d61-a95c-c1c7a8012f57.png)
 <!-- ![3x3_stitch](https://user-images.githubusercontent.com/84581147/170474111-fe226e70-14d4-4408-b4f0-61451f06b48a.png) -->
 <img src="https://user-images.githubusercontent.com/84581147/170474111-fe226e70-14d4-4408-b4f0-61451f06b48a.png" width="250" height="250">
 
-The current version supports clustering with:
-- HDBSCAN
+The current version supports clustering with HDBSCAN.
 > McInnes L, Healy J. Accelerated Hierarchical Density Based Clustering In: 2017 IEEE International Conference on Data Mining Workshops (ICDMW), IEEE, pp 33-42. 2017
 
 With the ability to split and stitch data while clustering independently if alternative clustering methods are preferred.
 
-## Notebooks included are: 
-- Train.ipynb
-- quick_start.ipynb
-- eval.ipynb
+## Installation
+Currently, HEADSS2 can be installed with `pip install .` from the base directory of this project.
 
-### Train.ipynb
-Demonstrates in detail the processes involved with HEADSS and how to extract the split/stitching process to use an alternative clustering algorithm to HDBSCAN.
+## Usage
+Full docs to follow. Example usage below:
 
-### quick_start.ipynb
-Demonstrates a quick use implimentation to explore the algorithm. A number of example datasets are included and can be called using the provided function or the user can provide thier own.
-
-#### Example usage with data as a pandas.DataFrame:
-```
-merge = headss_merge(df = data, N = 2, split_columns = ['x', 'y'], merge = True,
-                      cluster_columns=['x','y'], min_cluster_size = 10, 
-                      min_samples = 10, cluster_method = 'leaf', allow_single_cluster = False,
-                 total_threshold = 0.1, overlap_threshold = 0.5, minimum_members = 10) 
-
-# clustering result
-merged_df = merge.members_df
+#### Create regions for stitching and merging
+```python
+from headss2 import regions
+regs = regions.make_regions(df = data, n = 2, split_columns = ["x", "y"])
 ```
 
-### eval.ipynb
-Demonstrate the performance on all example datasets, producing the plots found in the paper.
-
-## Intallation
-
-To be made available using pip or conda. For now, use the provided requirements.txt or environment.yml files.
-
-## Requirements
-
-All workbooks are `.ipynb`, however HEADSS itself is simply `.py` and can be used provided the requirements are correctly installed.
-
-To install requirements:
-
-```setup
-pip install -r requirements.txt
+#### Cluster with HDBSCAN
+```python
+from headss2 import clustering
+clustered = clustering.cluster(split_data = regs.split_data, 
+            min_cluster_size = 10, min_samples = 10, allow_single_cluster = False, 
+            cluster_method = "eom", cluster_columns = ["x", "y"], drop_ungrouped = True)
 ```
 
-To set up an environment:
-
+#### Stitch regions
+```python
+from headss2 import stitching
+stitched = stitching.stitch(
+    clustered_data = clustered,
+    split_columns: ["x", "y"],
+    stitch_regions: regs.stitch_regions
+)
 ```
-conda env create -f environment.yml
+
+#### Merge regions
+```python
+from headss2 import merging
+merged = merging.merge_clusters(
+  clustered = clustered,
+  group_col = "group",
+  split_regions = regs.split_regions,
+  split_columns = ["x", "y"],
+  n_cores = 16)
 ```
 
-In some cases hdbscan is not properly installed, if this occurs please install manually after entering the environment using:
-```pip install hdbscan```
+## Contributors
+* Simon Harnqvist, Wide-field Astronomy Unit (WFAU), University of Edinburgh. Current maintainer and author of HEADSS2.
+* Dennis Crake, formerly of WFAU. Original author of HEADSS.
 
 ## Contributing
 
 We welcome contributions in any form but particuarly with implementations of additional clustering algorithms. To contribute please fork the project and submit a pull request. Any assistance with formatting, syntax or anything else feel free to contact the authors.
+
+## Citation
+If using HEADSS2, please cite both this repository and Dennis' <i>Astronomy and Computing</i> paper below for the algorithm and original implementation:
+> Crake, DA, Hambly, NC & Mann, RG 2023, 'HEADSS: HiErArchical Data Splitting and Stitching software for
+> non-distributed clustering algorithms', Astronomy and Computing, vol. 43, 100709, pp. 1-9.
+> https://doi.org/10.1016/j.ascom.2023.100709
 
 ## Licensing
 
