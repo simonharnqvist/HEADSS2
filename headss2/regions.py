@@ -123,15 +123,15 @@ def get_stitch_regions(low_cuts: np.ndarray, high_cuts: np.ndarray, split_column
     return regions.reset_index().rename(columns={'index': 'region'})
 
 
-def get_n_regions(n_cubes: int, split_columns: List[str]) -> int:
+def get_n_regions(n: int, split_columns: List[str]) -> int:
     """
     Compute the number of distinct regions from dimensional cube counts.
 
-    :param n_cubes: Subdivisions per dimension.
+    :param n: Subdivisions per dimension.
     :param split_columns: Names of dimensions.
     :return: Total region count.
     """
-    return (2 * n_cubes - 1) ** len(split_columns)
+    return (2 * n - 1) ** len(split_columns)
 
 
 def get_minima(limits: np.ndarray, step: np.ndarray) -> np.ndarray:
@@ -176,17 +176,17 @@ class Regions:
     stitch_regions: pd.DataFrame
 
 
-def make_regions(df: pd.DataFrame, n_cubes: int, split_columns: List[str]) -> Regions:
+def make_regions(df: pd.DataFrame, n: int, split_columns: List[str]) -> Regions:
     """
     Perform full region decomposition and return partitioned dataset.
 
     :param df: Input DataFrame to regionally split.
-    :param n_cubes: Number of cubes per dimension.
+    :param n: Number of cubes per dimension.
     :param split_columns: Columns to use for spatial splitting.
     :return: Structured Regions object with Dask-optimized outputs.
     """
-    n_regions = get_n_regions(n_cubes=n_cubes, split_columns=split_columns)
-    step = get_step(df, split_columns=split_columns, n_cubes=n_cubes)
+    n_regions = get_n_regions(n=n, split_columns=split_columns)
+    step = get_step(df, split_columns=split_columns, n=n)
     limits = get_limits(df, step=step, split_columns=split_columns)
     low_cuts = get_minima(limits, step=step)
     high_cuts = get_maxima(limits, step=step)
