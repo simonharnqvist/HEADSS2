@@ -23,22 +23,22 @@ Full docs to follow. Example usage below:
 
 #### Create regions for stitching and merging
 ```python
-from headss2 import regions
-regs = regions.make_regions(df = data, n = 2, split_columns = ["x", "y"])
+from headss2 import make_regions
+regs = make_regions(df = data, n = 2, split_columns = ["x", "y"])
 ```
 
 #### Cluster with HDBSCAN
 ```python
-from headss2 import clustering
-clustered = clustering.cluster(split_data = regs.split_data, 
+from headss2 import cluster
+clustered = cluster(split_data = regs.split_data, 
             min_cluster_size = 10, min_samples = 10, allow_single_cluster = False, 
             cluster_method = "eom", cluster_columns = ["x", "y"], drop_ungrouped = True)
 ```
 
 #### Stitch regions
 ```python
-from headss2 import stitching
-stitched = stitching.stitch(
+from headss2 import stitch
+stitched = stitch(
     clustered_data = clustered,
     split_columns: ["x", "y"],
     stitch_regions: regs.stitch_regions
@@ -47,8 +47,8 @@ stitched = stitching.stitch(
 
 #### Merge regions
 ```python
-from headss2 import merging
-merged = merging.merge_clusters(
+from headss2 import merge_clusters
+merged = merge_clusters(
   clustered = clustered,
   group_col = "group",
   split_regions = regs.split_regions,
