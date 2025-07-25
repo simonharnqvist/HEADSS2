@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Set
 import numpy as np
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
@@ -96,7 +96,30 @@ def get_cluster_oob_matches(clustered: pd.DataFrame, split_regions: pd.DataFrame
     return merged.shape[0],[merged.shape[0]/cluster1.shape[0], \
                merged.shape[0]/cluster2.shape[0]]
 
-def should_merge(cluster_indices: Tuple[int]):
+
+def cluster_merges_per_cluster(args: Tuple[int, List[Tuple[int]]]) -> Tuple[int]:
+    """Find clusters to merge with"""
+    cluster, cluster_merges = args
+    subset = [pair for pair in cluster_merges if pair[1] == cluster]
+    unique_clusters = list(set(val for pair in subset for val in pair))
+    pairs = [(a,b) for a,b in itertools.combinations(unique_clusters, 2)]
+    return pairs
+
+def check_merge_branches(cluster_merges: List[Tuple[int]], n_cores: int) -> Tuple[int]:
+    """Ensures all clusters merge to the final cluster in a chain.
+    Without this, chains can have multiple terminal nodes.
+    """
+
+    assert not isinstance(cluster_merges, pd.DataFrame)
+
+    args_list = [(cluster, cluster_merges) for cluster in cluster_merges]
+
+    with ProcessPoolExecutor(max_workers=n_cores) as executor:
+        results = list(executor.map(cluster_merges_per_cluster, args_list))
+        flattened_results = [item for sublist in results for item in sublist]
+        return tuple(set(cluster_merges) | set(flattened_results))
+
+def should_merge(cluster_indices: Tuple[int]) -> Tuple[int]:
     """Assess whether two clusters should merge"""
     i, j = cluster_indices
     tmp1 = _clustered[_clustered.group == i]
@@ -113,30 +136,8 @@ def should_merge(cluster_indices: Tuple[int]):
     )
     perc_overlap = [N_merged / len(tmp1), N_merged / len(tmp2)]
     if max(perc_merged) > _overlap_threshold and max(perc_overlap) > _total_threshold:
-        return [max(i, j), min(i, j)]
+        return (max(i, j), min(i, j))
     return None
-
-def cluster_merges_per_cluster(cluster:int, cluster_merges: pd.DataFrame) -> pd.DataFrame:
-    """Find clusters to merge with"""
-    subset = cluster_merges.loc[cluster_merges.group2 == cluster]
-    unique_clusters = np.unique(np.hstack((subset['group1'].unique(),(subset['group2'].unique()))))
-    return pd.DataFrame(itertools.combinations(unique_clusters, r=2), columns=["group1", "group2"])
-
-def cluster_merge_worker(args):
-    cluster, cluster_merges = args
-    return cluster_merges_per_cluster(cluster, cluster_merges)
-
-def check_merge_branches(cluster_merges: pd.DataFrame, n_cores:int):
-    '''Ensures all clusters merge to the final cluster in a chain. Without this branched 
-    chains can have two final nodes which do not merge'''
-
-    with ProcessPoolExecutor(max_workers=n_cores) as executor:
-        clusters = np.unique(cluster_merges.values.flatten())
-        args_list = [(cluster, cluster_merges) for cluster in clusters]
-        results = list(executor.map(cluster_merge_worker, args_list))
-        results = pd.concat(results)
-
-    return cluster_merges.merge(results)
 
 def check_cluster_merge(clustered: pd.DataFrame, 
                         matches: pd.DataFrame, 
@@ -158,10 +159,10 @@ def check_cluster_merge(clustered: pd.DataFrame,
     ) as executor:
         results = list(executor.map(should_merge, pairs))
 
-    results = [res for res in results if res]
-    cluster_merge_df = pd.DataFrame(results, columns=['group1', 'group2']).drop_duplicates()
+    cluster_merges: List[Tuple[int]] = [res for res in results if res]
 
-    return check_merge_branches(cluster_merge_df, n_cores=n_cores)
+    merged = check_merge_branches(cluster_merges, n_cores=n_cores)
+    return pd.DataFrame(merged, columns=["group1", "group2"])
 
 
 def merge_overlapping_clusters(clustered: pd.DataFrame, merges: pd.DataFrame) -> pd.DataFrame:
