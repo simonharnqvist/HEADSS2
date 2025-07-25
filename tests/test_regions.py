@@ -8,7 +8,7 @@ def flame():
     return pd.read_csv("example_data/flame.csv", header=None, usecols=[0,1,2]).rename(columns = {0:'x', 1:'y'})
 
 def test_get_step(flame):
-    step = regions.get_step(flame, ["x", "y"], n_cubes=2)
+    step = regions.get_step(flame, ["x", "y"], n=2)
     expected_step = np.array([6.85, 6.675])
     np.testing.assert_allclose(step, expected_step)
 

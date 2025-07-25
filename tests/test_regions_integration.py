@@ -40,15 +40,15 @@ def a3_data():
 
 @pytest.fixture
 def flame_regions(flame_data):
-    return regions.make_regions(n_cubes = 2, df = flame_data, split_columns=['x','y'])
+    return regions.make_regions(n = 2, df = flame_data, split_columns=['x','y'])
 
 @pytest.fixture
 def spiral_regions(spiral_data):
-    return regions.make_regions(n_cubes = 2, df = spiral_data, split_columns=['x','y'])
+    return regions.make_regions(n = 2, df = spiral_data, split_columns=['x','y'])
 
 @pytest.fixture
 def a3_regions(a3_data):
-    return regions.make_regions(n_cubes = 2, df = a3_data, split_columns=['x','y'])
+    return regions.make_regions(n = 2, df = a3_data, split_columns=['x','y'])
 
 @pytest.fixture
 def a3_stitch_ground_truth():

@@ -67,17 +67,17 @@ def get_limits(df: pd.DataFrame, step: np.ndarray, split_columns: List[str]) -> 
     return np.array(list(itertools.product(*mins)))
 
 
-def get_step(df: pd.DataFrame, split_columns: List[str], n_cubes: int) -> np.ndarray:
+def get_step(df: pd.DataFrame, split_columns: List[str], n: int) -> np.ndarray:
     """
     Determine step sizes for each split dimension.
 
     :param df: Input DataFrame.
     :param split_columns: Columns to calculate range over.
-    :param n_cubes: Desired number of subdivisions per dimension.
+    :param n: Desired number of subdivisions per dimension.
     :return: Step size per dimension.
     """
     df = df[split_columns]
-    return (df.max().values - df.min().values) / n_cubes
+    return (df.max().values - df.min().values) / n
 
 
 def get_split_data(df: pd.DataFrame, n_regions: int, limits: np.ndarray, split_columns: List[str], step: np.ndarray) -> pd.DataFrame:
