@@ -6,8 +6,24 @@ from typing import List
 def run_hdbscan(df: pd.DataFrame,
                 min_cluster_size: int, min_samples: int, allow_single_cluster: bool, 
                 cluster_method: str, cluster_columns: List[str], drop_ungrouped: bool = True,
-                group_offset = 0) -> pd.DataFrame:
-    """Cluster objects and format the results into a single dataframe."""
+                group_offset = 0, random_seed:int = 11) -> pd.DataFrame:
+    """Cluster objects and format the results into a single dataframe.
+
+    Args:
+        df (pd.DataFrame): Dataset to cluster.
+        min_cluster_size (int): Minimum permitted cluster size.
+        min_samples (int): The number of samples in a neighborhood for a point to be considered as a core point.
+        allow_single_cluster (bool): Whether to allow HDBSCAN to return a single cluster.
+        cluster_method (str): Method to select clusters; either "eom" (Excess of mass) or "leaf".
+        cluster_columns (List[str]): Columns to use in clustering.
+        drop_ungrouped (bool, optional): Whether to drop points that have not been included in a cluster. Defaults to True.
+        group_offset (int, optional): Offset number of starting cluster. Defaults to 0.
+        random_seed (int, optional): Random seed. Defaults to 11.
+
+    Returns:
+        pd.DataFrame: Clustered dataset.
+    """
+    #"""Cluster objects and format the results into a single dataframe."""
     np.random.seed(11)
 
     clusterer = HDBSCAN(
@@ -33,8 +49,20 @@ def run_hdbscan(df: pd.DataFrame,
 def cluster(split_data: pd.DataFrame, 
             min_cluster_size: int, min_samples: int, allow_single_cluster: bool, 
             cluster_method: str, cluster_columns: List[str], drop_ungrouped: bool = True) -> pd.DataFrame:
-    """Perform clustering with HDBSCAN per region, assigning globally unique group IDs."""
+    """Perform clustering with HDBSCAN per region, assigning globally unique group IDs.
 
+    Args:
+        split_data (pd.DataFrame): Dataset to cluster (split_data from Regions).
+        min_cluster_size (int): Minimum permitted cluster size.
+        min_samples (int): The number of samples in a neighborhood for a point to be considered as a core point.
+        allow_single_cluster (bool): Whether to allow HDBSCAN to return a single cluster.
+        cluster_method (str): Method to select clusters; either "eom" (Excess of mass) or "leaf".
+        cluster_columns (List[str]): Columns to use in clustering.
+        drop_ungrouped (bool, optional): Whether to drop points that have not been included in a cluster. Defaults to True.
+
+    Returns:
+        pd.DataFrame: Clustered data.
+    """    
     group_offset = 0
     clustered_frames = []
 

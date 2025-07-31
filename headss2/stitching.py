@@ -102,6 +102,15 @@ def stitch(
     split_columns: List[str],
     stitch_regions: pd.DataFrame
 ) -> pd.DataFrame:
-    """Main stitching pipeline with Dask support."""
+    """Stich regions together.
+
+    Args:
+        clustered_data (pd.DataFrame): Clustered data.
+        split_columns (List[str]): Columns used to split dataset.
+        stitch_regions (pd.DataFrame): Regions to stitch (Regions.stitch_data)
+
+    Returns:
+        pd.DataFrame: Stitched regions.
+    """
     centers = get_centers(clustered_data, split_columns)
     return stitch_clusters(clustered_data, centers, stitch_regions, split_columns)

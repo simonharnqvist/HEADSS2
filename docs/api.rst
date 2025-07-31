@@ -23,5 +23,5 @@ Stitching regions
 
 Merging clusters
 ------------------------
-.. autocmodule:: headss2.merging
+.. automodule:: headss2.merging
     :members:
