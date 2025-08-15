@@ -16,7 +16,7 @@ HEADSS
 
 HEADSS represents a process of splitting big data to avoid the introduction of edge effects and formalise the stitching process to provide a complete feature space. 
 
-Example split and stitch boundaries for n = 3 implimentation, where n refers to the number of cuts in each feature in the base layer.
+Example split and stitch boundaries for n = 3 implementation, where n refers to the number of cuts in each feature in the base layer.
 
 	
 
