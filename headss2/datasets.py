@@ -1,7 +1,7 @@
 import pandas as pd
 
 def dataset(name: str) -> pd.DataFrame:
-    from headss2 import example_data
+    from . import example_data
     import importlib.resources as pkg_resources
     filename = f"{name}.csv"
     with pkg_resources.open_text(example_data, filename) as f:
