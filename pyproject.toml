@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -26,7 +26,7 @@ packages = ["headss2"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"headss2.example_data" = ["example_data/*"]
+"headss2.example_data" = ["*"]
 
 [project.optional-dependencies]
 docs = [
