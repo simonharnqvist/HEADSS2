@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import dask.dataframe as dd
 from headss2 import clustering, datasets, stitching
 
 @pytest.fixture

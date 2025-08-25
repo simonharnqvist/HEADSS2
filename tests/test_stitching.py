@@ -1,7 +1,6 @@
 import pandas as pd
 from headss2 import stitching
 import pytest
-import dask.dataframe as dd
 
 @pytest.fixture
 def a3_clustered():
