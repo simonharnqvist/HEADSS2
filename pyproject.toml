@@ -26,7 +26,7 @@ packages = ["headss2"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"your_package_name" = ["example_data/*"]
+"headss2.example_data" = ["example_data/*"]
 
 [project.optional-dependencies]
 docs = [
