@@ -6,4 +6,4 @@ from headss2.merging import merge_clusters
 
 import warnings
 warnings.filterwarnings('ignore') # ignore futurewarning from HDBSCAN
-__all__ = ["dataset", "make_regions", "cluster", "stitch", "merge_clusters"]
+__all__ = ["dataset", "make_regions", "cluster", "stitch", "merge_clusters"]    
