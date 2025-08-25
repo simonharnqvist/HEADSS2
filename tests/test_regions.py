@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 import pytest
-from headss2 import regions
+from headss2 import regions, dataset
 
 @pytest.fixture
 def flame():
-    return pd.read_csv("example_data/flame.csv", header=None, usecols=[0,1,2]).rename(columns = {0:'x', 1:'y'})
+    return dataset("flame")
 
 def test_get_step(flame):
     step = regions.get_step(flame, ["x", "y"], n=2)

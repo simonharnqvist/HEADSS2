@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from headss2 import regions
+from headss2 import regions, dataset
 
 @pytest.fixture
 def flame_regions_ground_truth():
@@ -28,15 +28,15 @@ def spiral_stitch_ground_truth():
 
 @pytest.fixture
 def flame_data():
-    return pd.read_csv("example_data/flame.csv", header=None, usecols=[0,1,2]).rename(columns = {0:'x', 1:'y'})
+    return dataset("flame")
 
 @pytest.fixture
 def spiral_data():
-    return pd.read_csv("example_data/spiral.csv", header=None, usecols=[0,1,2]).rename(columns = {0:'x', 1:'y'})
+    return dataset("spiral")
 
 @pytest.fixture
 def a3_data():
-    return pd.read_csv("example_data/a3.csv", header=None, usecols=[0,1]).rename(columns = {0:'x', 1:'y'})
+    return dataset("a3")
 
 @pytest.fixture
 def flame_regions(flame_data):
@@ -77,7 +77,7 @@ def test_flame_regions_match_ground_truth(flame_regions_ground_truth, flame_regi
     )
 
 def test_flame_regions_split_match_ground_truth(flame_split_ground_truth, flame_regions):
-    pd.testing.assert_frame_equal(flame_split_ground_truth, flame_regions.split_regions, check_dtype=False, check_index_type=False)    
+    pd.testing.assert_frame_equal(flame_split_ground_truth, flame_regions.split_regions, check_dtype=False, check_index_type=False)
 
 def test_flame_regions_stitch_match_ground_truth(flame_stitch_ground_truth, flame_regions):
     pd.testing.assert_frame_equal(flame_stitch_ground_truth, flame_regions.stitch_regions, check_dtype=False, check_index_type=False)
@@ -101,7 +101,7 @@ def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_r
         check_index_type=False
     )
 def test_spiral_regions_split_match_ground_truth(spiral_split_ground_truth, spiral_regions):
-    pd.testing.assert_frame_equal(spiral_split_ground_truth, spiral_regions.split_regions, check_dtype=False, check_index_type=False)    
+    pd.testing.assert_frame_equal(spiral_split_ground_truth, spiral_regions.split_regions, check_dtype=False, check_index_type=False)
 
 def test_spiral_regions_stitch_match_ground_truth(spiral_stitch_ground_truth, spiral_regions):
     pd.testing.assert_frame_equal(spiral_stitch_ground_truth, spiral_regions.stitch_regions, check_dtype=False, check_index_type=False)
