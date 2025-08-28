@@ -5,8 +5,6 @@ import pandas as pd
 from functools import reduce
 import operator
 
-spark = SparkSession.builder.getOrCreate()
-
 
 def calculate_centers_spark(
     clustered_data: DataFrame, split_columns: List[str]
