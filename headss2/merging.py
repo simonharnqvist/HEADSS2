@@ -1,178 +1,230 @@
-from pyspark import sql
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
-from pyspark.sql.types import StructType, StructField, IntegerType, LongType, DoubleType
-from functools import reduce
+from pyspark.sql import SparkSession, DataFrame, functions as F
+from pyspark.sql.functions import col, array_distinct, flatten, collect_list, explode
+from pyspark.sql.types import StructType, StructField, IntegerType
+import pandas as pd
+from graphframes import GraphFrame
+from typing import Iterable
 
 
-def compute_cluster_bounds(clustered_sdf, split_columns):
-    """Compute per-cluster summary: count, min, max for each splitting column."""
-    agg_exprs = (
-        [F.count("*").alias("count")]
-        + [F.min(col).alias(f"{col}_min") for col in split_columns]
-        + [F.max(col).alias(f"{col}_max") for col in split_columns]
-    )
+def get_cluster_bounds(
+    df_clustered: DataFrame, split_columns: list[str], group_col="group"
+) -> DataFrame:
+    """Compute bounding boxes (min/max) for each cluster."""
+    agg_exprs = []
+    for c in split_columns:
+        agg_exprs.append(F.min(c).alias(f"{c}_min"))
+        agg_exprs.append(F.max(c).alias(f"{c}_max"))
 
-    return clustered_sdf.groupBy("group").agg(*agg_exprs)
-
-
-def find_overlapping_groups(bounds_df, split_columns):
-    """Identify cluster overlaps via cross join bounding boxes."""
-    a = bounds_df.alias("a")
-    b = bounds_df.alias("b")
-
-    # Build overlap condition: for any dimension, bounding ranges overlap
-    conditions = [
-        (F.col(f"b.{col}_min") < F.col(f"a.{col}_min"))
-        & (F.col(f"a.{col}_min") < F.col(f"b.{col}_max"))
-        for col in split_columns
-    ]
-    cond_expr = reduce(lambda x, y: x | y, conditions)
-
-    return (
-        a.crossJoin(b)
-        .filter(F.col("a.group") != F.col("b.group"))
-        .filter(cond_expr)
-        .select(F.col("a.group").alias("group1"), F.col("b.group").alias("group2"))
-    )
+    cluster_bounds = df_clustered.groupBy(group_col).agg(*agg_exprs)
+    return cluster_bounds
 
 
-def compute_oob_overlap(
-    spark_session,
-    clustered_sdf,
-    bounds_df,
-    split_regions_df,
-    split_columns,
-    min_members,
-):
-    """
-    Evaluate out-of-bounds overlap for candidate cluster pairs.
-    Efficiently computes overlaps entirely in Spark.
-    """
+def find_overlapping_pairs(
+    cluster_bounds: DataFrame, split_columns: list[str]
+) -> DataFrame:
+    """Find pairs of clusters with overlapping bounding boxes."""
+    bounds_1 = cluster_bounds.alias("bounds_1")
+    bounds_2 = cluster_bounds.alias("bounds_2")
 
-    # Step 1: Get overlapping group pairs (group1, group2) using your existing logic
-    overlaps = find_overlapping_groups(bounds_df, split_columns)  # returns Spark DF with group1, group2
+    join_cond = F.col("bounds_1.group") < F.col(
+        "bounds_2.group"
+    )  # avoid self and duplicate pairs
 
-    # Step 2: Join cluster data to group1 and group2
-    df1 = clustered_sdf.alias("df1")
-    df2 = clustered_sdf.alias("df2")
-    
-    joined = (
-        overlaps
-        .join(df1, F.col("group1") == F.col("df1.group"))
-        .join(df2, F.col("group2") == F.col("df2.group"))
-    )
-
-    # Step 3: Filter on matching split_columns (equivalent to inner join on those)
-    for col in split_columns:
-        joined = joined.filter(F.col(f"df1.{col}") == F.col(f"df2.{col}"))
-
-    # Step 4: Count number of overlapping rows per (group1, group2)
-    overlap_counts = (
-        joined
-        .groupBy("group1", "group2")
-        .agg(F.count("*").alias("n_overlap"))
-    )
-
-    # Step 5: Compute group sizes (needed for fractions)
-    group_sizes = (
-        clustered_sdf
-        .groupBy("group")
-        .agg(F.count("*").alias("group_size"))
-    )
-
-    group_sizes_1 = group_sizes.withColumnRenamed("group", "group1").withColumnRenamed("group_size", "size1")
-    group_sizes_2 = group_sizes.withColumnRenamed("group", "group2").withColumnRenamed("group_size", "size2")
-
-    # Step 6: Join group sizes with overlap counts
-    result = (
-        overlap_counts
-        .join(group_sizes_1, on="group1")
-        .join(group_sizes_2, on="group2")
-        .filter((F.col("size1") >= min_members) & (F.col("size2") >= min_members))
-        .withColumn("frac1", F.col("n_overlap") / F.col("size1"))
-        .withColumn("frac2", F.col("n_overlap") / F.col("size2"))
-    )
-
-    # Step 7: Select final columns
-    return result.select("group1", "group2", "n_overlap", "frac1", "frac2")
-
-def union_find_merge(overlap_df, overlap_thresh, total_thresh):
-    """
-    Gather all cluster merges where thresholds are exceeded.
-    Use a simple union-find in Python for grouping.
-    Returns a mapping of old_group -> new_root_group.
-    """
-    pairs = (
-        overlap_df.filter(
-            (F.col("frac1") >= overlap_thresh) & (F.col("frac2") >= total_thresh)
+    overlap_conditions = []
+    for c in split_columns:
+        cond = (F.col(f"bounds_1.{c}_min") <= F.col(f"bounds_2.{c}_max")) & (
+            F.col(f"bounds_1.{c}_max") >= F.col(f"bounds_2.{c}_min")
         )
-        .select("group1", "group2")
-        .collect()
+        overlap_conditions.append(cond)
+
+    full_overlap_cond = overlap_conditions[0]
+    for cond in overlap_conditions[1:]:
+        full_overlap_cond = full_overlap_cond & cond
+
+    overlapping_pairs = bounds_1.join(bounds_2, join_cond & full_overlap_cond).select(
+        F.col("bounds_1.group").alias("group1"), F.col("bounds_2.group").alias("group2")
+    )
+    return overlapping_pairs
+
+
+def get_cluster_oob_matches(
+    spark: SparkSession,
+    df_clustered: DataFrame,
+    df_overlap_pairs: DataFrame,
+    split_columns: list,
+    minimum_members: int,
+    overlap_threshold: float,
+    total_threshold: float,
+) -> DataFrame:
+    """
+    Evaluate overlapping cluster pairs based on actual members in overlap regions,
+    filtering with thresholds.
+    """
+    spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+
+    df_a = df_clustered.select(
+        [
+            F.col(c).alias(f"{c}_a") if c in split_columns + ["group"] else F.col(c)
+            for c in df_clustered.columns
+        ]
+    )
+    df_b = df_clustered.select(
+        [
+            F.col(c).alias(f"{c}_b") if c in split_columns + ["group"] else F.col(c)
+            for c in df_clustered.columns
+        ]
     )
 
-    parent = {}
-
-    def find(u):
-        parent.setdefault(u, u)
-        if parent[u] != u:
-            parent[u] = find(parent[u])
-        return parent[u]
-
-    def union(u, v):
-        ru, rv = find(u), find(v)
-        if ru != rv:
-            parent[rv] = ru
-
-    for r in pairs:
-        union(r.group1, r.group2)
-
-    return {g: find(g) for g in parent.keys()}
-
-
-def apply_cluster_merge(spark_session: sql.SparkSession, clustered_sdf, group_map):
-    """Apply cluster root mapping onto DataFrame."""
-    mapping_df = spark_session.createDataFrame(
-        [(k, v) for k, v in group_map.items()],
-        schema=StructType(
-            [
-                StructField("group", IntegerType()),
-                StructField("root_group", IntegerType()),
-            ]
-        ),
+    joined = (
+        df_overlap_pairs.join(df_a, F.col("group1") == F.col("group_a"))
+        .join(df_b, F.col("group2") == F.col("group_b"))
+        .select(
+            "group1",
+            "group2",
+            *[f"{c}_a" for c in split_columns],
+            *[f"{c}_b" for c in split_columns],
+        )
     )
-    return clustered_sdf.join(mapping_df, on="group", how="left").withColumn(
-        "cluster_merged", F.coalesce("root_group", "group")
+
+    schema = StructType(
+        [StructField("group1", IntegerType()), StructField("group2", IntegerType())]
+    )
+
+    def pandas_oob_merge(pdf_iter):
+        results = []
+        for pdf in pdf_iter:
+            print("Got type:", type(pdf))
+            if not isinstance(pdf, pd.DataFrame):
+                print("Data:", pdf)
+                continue
+
+            group1 = pdf["group1"].iloc[0]
+            group2 = pdf["group2"].iloc[0]
+
+            cluster1 = pdf[[f"{c}_a" for c in split_columns]].copy()
+            cluster1.columns = split_columns
+
+            cluster2 = pdf[[f"{c}_b" for c in split_columns]].copy()
+            cluster2.columns = split_columns
+
+            if len(cluster1) < minimum_members or len(cluster2) < minimum_members:
+                continue
+
+            overlap_bounds = {}
+            for col_name in split_columns:
+                min1, max1 = cluster1[col_name].min(), cluster1[col_name].max()
+                min2, max2 = cluster2[col_name].min(), cluster2[col_name].max()
+                overlap_min = max(min1, min2)
+                overlap_max = min(max1, max2)
+
+                if overlap_min > overlap_max:
+                    break  # no overlap
+
+                overlap_bounds[col_name] = (overlap_min, overlap_max)
+
+            else:
+                for col_name in split_columns:
+                    low, high = overlap_bounds[col_name]
+                    cluster1 = cluster1[
+                        (cluster1[col_name] >= low) & (cluster1[col_name] <= high)
+                    ]
+                    cluster2 = cluster2[
+                        (cluster2[col_name] >= low) & (cluster2[col_name] <= high)
+                    ]
+
+                if len(cluster1) < minimum_members or len(cluster2) < minimum_members:
+                    continue
+
+                merged = pd.merge(cluster1, cluster2, on=split_columns)
+                N_merged = len(merged)
+                if N_merged == 0:
+                    continue
+
+                perc_merged = [N_merged / len(cluster1), N_merged / len(cluster2)]
+                perc_overlap = [N_merged / len(pdf), N_merged / len(pdf)]
+
+                if (
+                    max(perc_merged) > overlap_threshold
+                    and max(perc_overlap) > total_threshold
+                ):
+                    results.append(
+                        {"group1": min(group1, group2), "group2": max(group1, group2)}
+                    )
+
+                print(
+                    f"Groups: {group1}, {group2}, merged: {N_merged}, cluster1: {len(cluster1)}, cluster2: {len(cluster2)}"
+                )
+
+        return pd.DataFrame(results)
+
+    merged_df = joined.groupBy("group1", "group2").applyInPandas(
+        pandas_oob_merge, schema=schema
+    )
+    return merged_df
+
+
+def chain_merge_clusters(merge_pairs: DataFrame) -> DataFrame:
+    """
+    Chain merge clusters by finding connected components of cluster merge graph.
+    """
+    groups1 = merge_pairs.select(F.col("group1").alias("id"))
+    groups2 = merge_pairs.select(F.col("group2").alias("id"))
+    vertices = groups1.union(groups2).distinct()
+
+    edges = merge_pairs.select(
+        F.col("group1").alias("src"), F.col("group2").alias("dst")
+    )
+
+    g = GraphFrame(vertices, edges)
+    components = g.connectedComponents()
+
+    return components.select(
+        F.col("id").alias("group"), F.col("component").alias("merged_group")
     )
 
 
 def merge_clusters(
-    spark_session,
-    clustered_sdf,
-    split_regions_df,
-    split_columns,
-    minimum_members=10,
-    overlap_threshold=0.5,
-    total_threshold=0.1,
-):
+    spark: SparkSession,
+    df_clustered: DataFrame,
+    split_columns: list,
+    minimum_members: int = 10,
+    overlap_threshold: float = 0.5,
+    total_threshold: float = 0.1,
+) -> DataFrame:
+    """Merge clusters to remove artificial effects of splitting.
+
+    Args:
+        spark (SparkSession): Spark session.
+        df_clustered (DataFrame): Dataframe of clustered data, with each row assigned to a cluster in column 'group'.
+        split_columns (list): List of columns to cluster/split by.
+        minimum_members (int, optional): Minimum members in overlap to allow merge. Defaults to 10.
+        overlap_threshold (float, optional): Fraction of mutual members within the overlap region required to allow merge.. Defaults to 0.5.
+        total_threshold (float, optional): Fraction of mutual members within the whole cluster to allow merge. Defaults to 0.1.
+
+    Returns:
+        DataFrame: Data with merged clusters.
     """
-    End-to-end Spark-based merge pipeline:
-    1. Compute cluster bounds
-    2. Detect overlapping cluster pairs
-    3. Estimate OOB overlaps (simplified logic)
-    4. Use union-find to collapse clusters
-    5. Apply mapping to get final grouped clusters
-    """
-    bounds_df = compute_cluster_bounds(clustered_sdf, split_columns)
-    overlaps_oob = compute_oob_overlap(
-        spark_session=spark_session,
-        clustered_sdf=clustered_sdf,
-        bounds_df=bounds_df,
-        split_regions_df=split_regions_df,
-        split_columns=split_columns,
-        min_members=minimum_members,
+    cluster_bounds = get_cluster_bounds(df_clustered, split_columns)
+    df_overlap_pairs = find_overlapping_pairs(cluster_bounds, split_columns)
+
+    merge_pairs = get_cluster_oob_matches(
+        spark,
+        df_clustered,
+        df_overlap_pairs,
+        split_columns,
+        minimum_members,
+        overlap_threshold,
+        total_threshold,
     )
-    group_map = union_find_merge(overlaps_oob, overlap_threshold, total_threshold)
-    return apply_cluster_merge(
-        spark_session=spark_session, clustered_sdf=clustered_sdf, group_map=group_map
-    )
+
+    merged_clusters = chain_merge_clusters(merge_pairs)
+
+    df_with_merged = df_clustered.join(
+        merged_clusters, on="group", how="left"
+    ).withColumn("merged_group", F.coalesce(F.col("merged_group"), F.col("group")))
+
+    df_with_merged = df_with_merged.withColumn(
+        "group", F.col("merged_group").cast("int")
+    ).drop("merged_group")
+
+    return df_with_merged

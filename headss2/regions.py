@@ -79,27 +79,15 @@ def get_split_regions(
     split_columns: List[str],
     step: np.ndarray,
 ):
-    # Build schema: one FloatType column for each *_mins and *_max
-    fields = []
-    for col in split_columns:
-        fields.append(StructField(f"{col}_mins", FloatType(), False))
-        fields.append(StructField(f"{col}_max", FloatType(), False))
-    schema = StructType(fields)
-
-    # Ensure all values passed into Row are native Python floats
     rows = []
-    for mins in limits:
-        region_dict = {}
-        for i, col in enumerate(split_columns):
-            region_dict[f"{col}_mins"] = float(mins[i])  # Cast np.float64 -> float
-            region_dict[f"{col}_max"] = float(
-                mins[i] + step[i]
-            )  # Cast np.float64 -> float
+    for region_idx, mins in enumerate(limits):
+        region_dict = {"region": region_idx}
+        for idx, col in enumerate(split_columns):
+            region_dict[f"{col}_min"] = float(mins[idx])
+            region_dict[f"{col}_max"] = float(mins[idx] + step[idx])
         rows.append(sql.Row(**region_dict))
 
-    return spark_session.createDataFrame(rows, schema=schema).withColumn(
-        "region", lit(None)
-    )
+    return spark_session.createDataFrame(rows)
 
 
 def get_stitch_regions(
@@ -109,13 +97,14 @@ def get_stitch_regions(
     split_columns: List[str],
 ) -> sql.DataFrame:
     rows = []
-    for low, high in zip(low_cuts, high_cuts):
-        region_dict = {}
-        for i, col in enumerate(split_columns):
-            region_dict[f"{col}_mins"] = float(low[i])
-            region_dict[f"{col}_max"] = float(high[i])
+    for idx, (low, high) in enumerate(zip(low_cuts, high_cuts)):
+        region_dict = {"region": idx}
+        for i, col_name in enumerate(split_columns):
+            region_dict[f"{col_name}_min"] = float(low[i])
+            region_dict[f"{col_name}_max"] = float(high[i])
         rows.append(sql.Row(**region_dict))
-    return spark_session.createDataFrame(rows).withColumn("region", lit(None))
+
+    return spark_session.createDataFrame(rows)
 
 
 def get_n_regions(n: int, split_columns: List[str]) -> int:
@@ -158,7 +147,6 @@ def make_regions(
     if isinstance(df, pd.DataFrame):
         df = spark_session.createDataFrame(df)
 
-    n_regions = get_n_regions(n=n, split_columns=split_columns)
     step = get_step(df, split_columns=split_columns, n=n)
     limits = get_limits(df, step=step, split_columns=split_columns)
     low_cuts = get_minima(limits, step=step)

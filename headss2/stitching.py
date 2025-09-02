@@ -1,116 +1,146 @@
-from pyspark.sql import SparkSession, DataFrame
+from pyspark import sql
 from pyspark.sql.functions import col, count, expr, lit
 from typing import List
 import pandas as pd
 from functools import reduce
 import operator
+import numpy as np
 
 
-def calculate_centers_spark(
-    clustered_data: DataFrame, split_columns: List[str]
-) -> DataFrame:
+def calculate_centers(
+    clustered_data: pd.DataFrame, split_columns: List[str]
+) -> pd.DataFrame:
     """
-    Calculate the median center and size for each cluster in PySpark.
+    Calculate the median center and size for each cluster.
+
+    Robust against empty partitions, missing groups, or metadata inference.
+
+    :param data: A pandas DataFrame with a 'group' column and coordinate columns.
+    :param split_columns: Names of columns to include in median calculation.
+    :return: DataFrame with median center coordinates, cluster size (N), and group ID.
     """
+    if clustered_data.empty:
+        raise ValueError("Empty dataframe")
     if "group" not in clustered_data.columns:
         raise KeyError("Column 'group' not in dataframe")
 
-    if clustered_data.rdd.isEmpty():
-        raise ValueError("Empty dataframe")
+    # Drop NA values in group column to avoid sort issues
+    groups = clustered_data["group"].dropna().unique()
+    records = []
 
-    # Approximate median using percentile_approx for each group
-    exprs = [
-        expr(f"percentile_approx({col_name}, 0.5) as {col_name}")
-        for col_name in split_columns
-    ]
-    exprs.append(count("*").alias("N"))
+    for group in sorted(groups):
+        group_data = clustered_data[clustered_data["group"] == group]
+        if group_data.empty:
+            continue
 
-    centers_df = clustered_data.groupBy("group").agg(*exprs)
-    return centers_df
+        center = group_data[split_columns].median(numeric_only=True)
+        center_df = pd.DataFrame([center])
+        center_df["N"] = len(group_data)
+        center_df["group"] = group
+        records.append(center_df)
+
+    if not records:
+        return pd.DataFrame(columns=split_columns + ["N", "group"])
+
+    res = pd.concat(records)
+
+    if "N" not in res.columns:
+        raise KeyError("Column 'N' not in dataframe")
+
+    return res
 
 
-def get_centers_spark(
-    clustered_data: DataFrame, split_columns: List[str]
-) -> List[DataFrame]:
+def get_centers(
+    clustered: sql.DataFrame, split_columns: List[str]
+) -> List[pd.DataFrame]:
     """
-    Compute the center of each cluster per region.
+    Compute the median center and size of each cluster, per region.
     Returns a list of Spark DataFrames (one per region).
+    Uses the Pandas-based `calculate_centers()` function internally.
     """
-    if "region" not in clustered_data.columns:
+    if "region" not in clustered.columns:
         raise KeyError("Missing 'region' column for region-based grouping")
 
+    if not isinstance(clustered, sql.DataFrame):
+        raise ValueError(
+            f"'clustered' expected to be a Spark DataFrame, found {type(clustered)}"
+        )
+
     regions = (
-        clustered_data.select("region")
-        .distinct()
-        .rdd.map(lambda r: r["region"])
-        .collect()
+        clustered.select("region").distinct().rdd.map(lambda r: r["region"]).collect()
     )
+
     centers_list = []
 
     for region in regions:
-        region_df = clustered_data.filter(col("region") == region)
-        centers_df = calculate_centers_spark(region_df, split_columns)
-        centers_df = centers_df.withColumn("region", lit(region))  # Add region back
-        centers_list.append(centers_df)
+        region_df = clustered.filter(col("region") == region)
+        region_pd = region_df.toPandas()
+        centers_pd = calculate_centers(region_pd, split_columns=split_columns)
+        centers_pd["region"] = region
+        centers_list.append(centers_pd)
 
     return centers_list
 
 
-def cut_misplaced_clusters_spark(
-    centers: List[DataFrame], stitch_regions: pd.DataFrame, split_columns: List[str]
+def cut_misplaced_clusters(
+    centers: list[pd.DataFrame], stitch_regions: pd.DataFrame, split_columns: List[str]
 ) -> pd.DataFrame:
     """
-    Drop clusters whose centers lie outside the valid bounding box from stitch_regions.
-    Returns a Pandas DataFrame of valid clusters.
+    Drop clusters whose centers occupy the incorrect region defined by
+        stitching_regions.
     """
-    valid_centers = []
 
-    for idx, center_df in enumerate(centers):
-        bounds = stitch_regions.loc[idx]
+    centers_transformed: list[pd.DataFrame] = []
 
-        conditions = [
-            (col(col_name) >= bounds[f"{col_name}_mins"])
-            & (col(col_name) <= bounds[f"{col_name}_max"])
-            for col_name in split_columns
-        ]
+    for center_df in centers:
+        region = int(center_df["region"].unique().item())
+        stitch_region = stitch_regions[stitch_regions["region"] == region]
 
-        # Combine all conditions with AND
-        if not conditions:
-            continue
-        combined_condition = reduce(operator.and_, conditions)
-        filtered_df = center_df.filter(combined_condition)
+        center_transformed: pd.DataFrame = pd.DataFrame(
+            center_df[
+                np.all(
+                    [
+                        (
+                            center_df.loc[:, col_name].between(
+                                float(stitch_region[f"{col_name}_min"].item()),
+                                float(stitch_region[f"{col_name}_max"].item()),
+                            )
+                        )
+                        for i, col_name in enumerate(split_columns)
+                    ],
+                    axis=0,
+                )
+            ]
+        )
+        centers_transformed.append(center_transformed)
 
-        if not filtered_df.rdd.isEmpty():
-            valid_centers.append(filtered_df.toPandas())
-
-    if not valid_centers:
-        return pd.DataFrame(columns=["group"] + split_columns + ["N", "region"])
-
-    return pd.concat(valid_centers, ignore_index=True)
+    return pd.concat(centers_transformed)
 
 
-def stitch_clusters_spark(
-    regions: DataFrame,
-    centers: List[DataFrame],
+def stitch_clusters(
+    regions: sql.DataFrame,
+    centers: List[pd.DataFrame],
     stitch_regions: pd.DataFrame,
     split_columns: List[str],
-) -> DataFrame:
+) -> sql.DataFrame:
     """
     Filter regions to include only valid clusters based on their center positions.
     """
-    valid_clusters_df = cut_misplaced_clusters_spark(
-        centers, stitch_regions, split_columns
-    )
+    valid_clusters_df = cut_misplaced_clusters(centers, stitch_regions, split_columns)
     valid_group_ids = valid_clusters_df["group"].dropna().unique().tolist()
 
     return regions.filter(col("group").isin(valid_group_ids))
 
 
 def stitch(
-    clustered_data: DataFrame, split_columns: List[str], stitch_regions: pd.DataFrame
-) -> DataFrame:
+    clustered: sql.DataFrame, split_columns: List[str], stitch_regions: pd.DataFrame
+) -> sql.DataFrame:
     """
     Stitch regions by removing misplaced clusters using PySpark.
     """
-    centers = get_centers_spark(clustered_data, split_columns)
-    return stitch_clusters_spark(clustered_data, centers, stitch_regions, split_columns)
+    if not isinstance(clustered, sql.DataFrame):
+        raise ValueError(
+            f"'clustered' must be a Spark dataframe, found {type(clustered)}"
+        )
+    centers = get_centers(clustered, split_columns)
+    return stitch_clusters(clustered, centers, stitch_regions, split_columns)

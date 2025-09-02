@@ -1,4 +1,4 @@
-from headss2 import clustering_spark, regions, datasets, merging, stitching
+from headss2 import clustering, regions, datasets, merging, stitching
 from HEADSS import headss_merge
 import time
 import pandas as pd
@@ -40,7 +40,7 @@ for n in [1500, 3000, 6000, 12_000, 24_000, 48_000, 96_000]:
     regs = regions.make_regions(data_subset, 2, SPLIT_COLUMNS)
     h2_split_data = regs.split_data
     h2_split_regions = regs.split_regions
-    clustered = clustering_spark.cluster(
+    clustered = clustering.cluster(
         split_data=h2_split_data,
         min_samples=10,
         min_cluster_size=10,
@@ -69,7 +69,7 @@ for n in [1500, 3000, 6000, 12_000, 24_000, 48_000, 96_000]:
     regs = regions.make_regions(data_subset, 2, SPLIT_COLUMNS)
     h2_split_data = regs.split_data
     h2_split_regions = regs.split_regions
-    clustered = clustering_spark.cluster(
+    clustered = clustering.cluster(
         split_data=h2_split_data,
         min_samples=10,
         min_cluster_size=10,
