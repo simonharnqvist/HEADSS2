@@ -8,9 +8,9 @@ from headss2.merging import (
 )
 
 
-@pytest.fixture(scope="session")
-def spark():
-    return SparkSession.builder.master("local[*]").appName("test-regions").getOrCreate()
+# @pytest.fixture(scope="session")
+# def spark():
+#     return SparkSession.builder.master("local[*]").appName("test-regions").getOrCreate()
 
 
 @pytest.fixture

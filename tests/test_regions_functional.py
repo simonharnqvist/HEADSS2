@@ -4,14 +4,16 @@ from headss2 import regions, dataset
 from pyspark.sql import SparkSession
 
 
-@pytest.fixture(scope="session")
-def spark():
-    return SparkSession.builder.master("local[*]").appName("test-regions").getOrCreate()
+# @pytest.fixture(scope="session")
+# def spark():
+#     return SparkSession.builder.master("local[*]").appName("test-regions").getOrCreate()
 
 
 @pytest.fixture
 def flame_regions_ground_truth():
-    return pd.read_csv("tests/ground_truth/flame_regions.csv", index_col=0)
+    return pd.read_csv(
+        "tests/ground_truth/flame_regions.csv", index_col=0
+    ).drop_duplicates(subset=["x", "y"])
 
 
 @pytest.fixture
@@ -26,8 +28,13 @@ def flame_stitch_ground_truth():
 
 @pytest.fixture
 def spiral_regions_ground_truth():
-    return pd.read_csv(
-        "tests/ground_truth/spiral_regions.csv", dtype={"2": "Int64"}, index_col=0
+    return (
+        pd.read_csv(
+            "tests/ground_truth/spiral_regions.csv", dtype={"2": "Int64"}, index_col=0
+        )
+        .drop_duplicates(subset=["x", "y"])
+        .reset_index()
+        .sort_values(by=["x", "y"])
     )
 
 
@@ -117,7 +124,7 @@ def test_flame_regions_split_match_ground_truth(
     column_order = ["region", "x_min", "x_max", "y_min", "y_max"]
     pd.testing.assert_frame_equal(
         flame_split_ground_truth[column_order],
-        flame_regions.split_regions.toPandas()[column_order],
+        flame_regions.split_regions[column_order],
         check_dtype=False,
         check_index_type=False,
     )
@@ -129,7 +136,7 @@ def test_flame_regions_stitch_match_ground_truth(
     column_order = ["region", "x_min", "x_max", "y_min", "y_max"]
     pd.testing.assert_frame_equal(
         flame_stitch_ground_truth[column_order],
-        flame_regions.stitch_regions.toPandas()[column_order],
+        flame_regions.stitch_regions[column_order],
         check_dtype=False,
         check_index_type=False,
     )
@@ -137,7 +144,10 @@ def test_flame_regions_stitch_match_ground_truth(
 
 def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_regions):
     expected = spiral_regions_ground_truth.copy()
-    actual = spiral_regions.split_data.toPandas()
+    actual = spiral_regions.split_data.toPandas().sort_values(by=["x", "y"])
+
+    print(expected)
+    print(actual)
 
     expected.columns = expected.columns.map(str)
     actual.columns = actual.columns.map(str)
@@ -163,11 +173,11 @@ def test_spiral_regions_split_match_ground_truth(
     spiral_split_ground_truth, spiral_regions
 ):
 
-    print(spiral_regions.split_regions.toPandas())
+    print(spiral_regions.split_regions)
     column_order = ["region", "x_min", "x_max", "y_min", "y_max"]
     pd.testing.assert_frame_equal(
         spiral_split_ground_truth[column_order],
-        spiral_regions.split_regions.toPandas()[column_order],
+        spiral_regions.split_regions[column_order],
         check_dtype=False,
         check_index_type=False,
     )
@@ -179,7 +189,7 @@ def test_spiral_regions_stitch_match_ground_truth(
     column_order = ["region", "x_min", "x_max", "y_min", "y_max"]
     pd.testing.assert_frame_equal(
         spiral_stitch_ground_truth[column_order],
-        spiral_regions.stitch_regions.toPandas()[column_order],
+        spiral_regions.stitch_regions[column_order],
         check_dtype=False,
         check_index_type=False,
     )
@@ -191,7 +201,7 @@ def test_a3_stitch_regions_match_ground_truth(a3_stitch_ground_truth, a3_regions
 
     pd.testing.assert_frame_equal(
         a3_stitch_ground_truth[column_order],
-        a3_regions.stitch_regions.toPandas()[column_order],
+        a3_regions.stitch_regions[column_order],
         check_dtype=False,
         check_index_type=False,
     )

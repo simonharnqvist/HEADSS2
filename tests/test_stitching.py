@@ -4,13 +4,13 @@ import pytest
 from pyspark import sql
 
 
-@pytest.fixture(scope="session")
-def spark():
-    return (
-        sql.SparkSession.builder.master("local[*]")
-        .appName("test-regions")
-        .getOrCreate()
-    )
+# @pytest.fixture(scope="session")
+# def spark():
+#     return (
+#         sql.SparkSession.builder.master("local[*]")
+#         .appName("test-regions")
+#         .getOrCreate()
+#     )
 
 
 @pytest.fixture

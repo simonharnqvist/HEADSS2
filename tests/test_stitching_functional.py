@@ -6,13 +6,13 @@ from pyspark.sql.types import StringType
 from pyspark import sql
 
 
-@pytest.fixture(scope="session")
-def spark():
-    return (
-        sql.SparkSession.builder.master("local[*]")
-        .appName("test-regions")
-        .getOrCreate()
-    )
+# @pytest.fixture(scope="session")
+# def spark():
+#     return (
+#         sql.SparkSession.builder.master("local[*]")
+#         .appName("test-regions")
+#         .getOrCreate()
+#     )
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def a3_clustered(spark):
     return (
         spark.createDataFrame(
             pd.read_csv("tests/ground_truth/a3_clustered.csv", index_col=0)
-        )
+        )  # .drop_duplicates(subset=["x", "y"])
         # .set_index("region", drop=True)
         # .drop(columns=["index"])
     )
