@@ -19,14 +19,14 @@ def flame(spark):
 @pytest.fixture
 def flame_regions(flame, spark):
     return regions.make_regions(
-        spark_session=spark, df=flame, n=2, split_columns=["x", "y"]
+        spark_session=spark, df=flame, n=2, cluster_columns=["x", "y"]
     )
 
 
 def test_assign_regions_basic(spark):
     data = [(0.1, 0.1), (0.9, 0.9), (0.4, 0.6)]
     df = spark.createDataFrame(data, ["x", "y"])
-    df_with_region = regions.assign_regions(df, split_columns=["x", "y"], n=2)
+    df_with_region = regions.assign_regions(df, cluster_columns=["x", "y"], n=2)
 
     regs = [row["region"] for row in df_with_region.collect()]
     assert all(isinstance(r, int) for r in regs)
@@ -36,7 +36,7 @@ def test_assign_regions_basic(spark):
 def test_get_step_and_limits(spark):
     data = [(0.0, 0.0), (1.0, 1.0)]
     df = spark.createDataFrame(data, ["x", "y"])
-    step, limits = regions.get_step_and_limits(df, split_columns=["x", "y"], n=2)
+    step, limits = regions.get_step_and_limits(df, cluster_columns=["x", "y"], n=2)
 
     assert isinstance(step, np.ndarray)
     assert step.shape == (2,)
@@ -67,7 +67,7 @@ def test_make_regions_end_to_end(spark):
     # Simple 2D data
     data = [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)]
     df = spark.createDataFrame(data, ["x", "y"])
-    result = regions.make_regions(spark, df, n=2, split_columns=["x", "y"])
+    result = regions.make_regions(spark, df, n=2, cluster_columns=["x", "y"])
 
     # Region column exists
     assert "region" in result.split_data.columns
@@ -85,7 +85,7 @@ def test_make_regions_end_to_end(spark):
 
 
 def test_split_dataframes_preserves_number_of_rows(flame):
-    df = regions.assign_regions(df=flame, n=2, split_columns=["x", "y"])
+    df = regions.assign_regions(df=flame, n=2, cluster_columns=["x", "y"])
     assert df.count() == flame.count()
 
 

@@ -12,11 +12,11 @@ class HEADSS2:
         min_samples: int | None = None,
         allow_single_cluster: bool = False,
         clustering_method: str = "eom",
-        drop_ungrouped: bool = True,
+        drop_unclustered: bool = True,
         merge_clusters: bool = True,
-        overlap_merge_threshold: float | None = 0.5,
-        total_merge_threshold: float | None = 0.1,
-        min_merge_members: float | None = 10,
+        per_cluster_overlap_threshold: float | None = 0.5,
+        combined_overlap_threshold: float | None = 0.1,
+        min_n_overlap: int | None = 10,
         spark_session: sql.SparkSession | None = None,
     ):
 
@@ -24,13 +24,13 @@ class HEADSS2:
             spark_session = sql.SparkSession.builder.getOrCreate()
 
         if (
-            not overlap_merge_threshold
-            or not total_merge_threshold
-            or not min_merge_members
+            not per_cluster_overlap_threshold
+            or not combined_overlap_threshold
+            or not min_n_overlap
             and merge_clusters
         ):
             raise ValueError(
-                "merge_clusters is 'True', but values are missing for one or more of 'overlap_merge_threshold', 'total_merge_treshold', 'min_merge_members'"
+                "merge_clusters is 'True', but values are missing for one or more of 'per_cluster_overlap_threshold', 'combined_overlap_threshold', 'min_n_overlap'"
             )
 
         self.n = n
@@ -39,11 +39,11 @@ class HEADSS2:
         self.min_samples = min_samples
         self.allow_single_cluster = allow_single_cluster
         self.clustering_method = clustering_method
-        self.drop_ungrouped = drop_ungrouped
+        self.drop_unclustered = drop_unclustered
         self.merge_clusters = merge_clusters
-        self.overlap_merge_threshold = overlap_merge_threshold
-        self.total_merge_threshold = total_merge_threshold
-        self.min_merge_members = min_merge_members
+        self.per_cluster_overlap_threshold = per_cluster_overlap_threshold
+        self.combined_overlap_threshold = combined_overlap_threshold
+        self.min_n_overlap = min_n_overlap
 
         self.data = None
         self.cluster_columns = None
@@ -57,7 +57,7 @@ class HEADSS2:
             spark_session=self.spark_session,
             df=data,
             n=self.n,
-            split_columns=cluster_on,
+            cluster_columns=cluster_on,
         )
 
         self.regions = regs
@@ -71,14 +71,14 @@ class HEADSS2:
             allow_single_cluster=self.allow_single_cluster,
             clustering_method=self.clustering_method,
             cluster_columns=cluster_on,
-            drop_ungrouped=self.drop_ungrouped,
+            drop_unclustered=self.drop_unclustered,
         )
 
         self.clustered = clustered
 
         stitched = stitch(
             clustered=clustered,
-            split_columns=cluster_on,
+            cluster_columns=cluster_on,
             stitch_regions=regs.stitch_regions,
         )
 
@@ -86,10 +86,9 @@ class HEADSS2:
 
         if self.merge_clusters:
             self.merged = merge_clusters(
-                spark=self.spark_session,
                 clustered=clustered,
-                split_columns=cluster_on,
-                min_merge_members=self.min_merge_members,
-                overlap_merge_threshold=self.overlap_merge_threshold,
-                total_merge_threshold=self.total_merge_threshold,
+                cluster_columns=cluster_on,
+                min_n_overlap=self.min_n_overlap,
+                per_cluster_overlap_threshold=self.per_cluster_overlap_threshold,
+                combined_overlap_threshold=self.combined_overlap_threshold,
             )

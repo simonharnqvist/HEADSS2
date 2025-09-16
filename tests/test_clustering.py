@@ -11,7 +11,7 @@ from pyspark.sql import SparkSession
 @pytest.fixture
 def a3_regions(spark):
     a3 = dataset("a3")
-    regs = make_regions(spark_session=spark, df=a3, n=2, split_columns=["x", "y"])
+    regs = make_regions(spark_session=spark, df=a3, n=2, cluster_columns=["x", "y"])
     return regs
 
 
@@ -23,7 +23,7 @@ def test_clustering_returns_original_number_of_entries_a3(a3_regions):
         allow_single_cluster=True,
         clustering_method="eom",
         cluster_columns=["x", "y"],
-        drop_ungrouped=False,
+        drop_unclustered=False,
     )
     assert clustered.count() == a3_regions.split_data.count()
 
@@ -31,7 +31,7 @@ def test_clustering_returns_original_number_of_entries_a3(a3_regions):
 @pytest.fixture
 def t4_8k_regions(spark):
     t4_8k = dataset("t4_8k")
-    regs = make_regions(spark_session=spark, df=t4_8k, n=2, split_columns=["x", "y"])
+    regs = make_regions(spark_session=spark, df=t4_8k, n=2, cluster_columns=["x", "y"])
     return regs
 
 
@@ -43,6 +43,6 @@ def test_clustering_returns_original_number_of_entries_t4_8k(t4_8k_regions):
         allow_single_cluster=True,
         clustering_method="eom",
         cluster_columns=["x", "y"],
-        drop_ungrouped=False,
+        drop_unclustered=False,
     )
     assert clustered.count() == t4_8k_regions.split_data.count()

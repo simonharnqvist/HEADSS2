@@ -41,7 +41,7 @@ def a3_stitched(spark):
 def test_stitching_a3(a3_clustered, a3_stitch_regions, a3_stitched):
     actual = stitching.stitch(
         clustered=a3_clustered,
-        split_columns=["x", "y"],
+        cluster_columns=["x", "y"],
         stitch_regions=a3_stitch_regions,
     )
 
@@ -54,7 +54,7 @@ def test_stitching_a3(a3_clustered, a3_stitch_regions, a3_stitched):
         expected = expected.withColumn(col_name, col(col_name).cast(StringType()))
 
     # Define columns to check
-    columns_to_check = ["x", "y", "region", "group"]
+    columns_to_check = ["x", "y", "region", "cluster"]
 
     # Select relevant columns and sort for comparison
     actual_subset = actual.select(columns_to_check).orderBy(columns_to_check)

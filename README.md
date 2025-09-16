@@ -24,7 +24,7 @@ Full docs to follow. Example usage below:
 #### Create regions for stitching and merging
 ```python
 from headss2 import make_regions
-regs = make_regions(df = data, n = 2, split_columns = ["x", "y"])
+regs = make_regions(df = data, n = 2, cluster_columns = ["x", "y"])
 ```
 
 #### Cluster with HDBSCAN
@@ -32,7 +32,7 @@ regs = make_regions(df = data, n = 2, split_columns = ["x", "y"])
 from headss2 import cluster
 clustered = cluster(split_data = regs.split_data, 
             min_cluster_size = 10, min_samples = 10, allow_single_cluster = False, 
-            cluster_method = "eom", cluster_columns = ["x", "y"], drop_ungrouped = True)
+            cluster_method = "eom", cluster_columns = ["x", "y"], drop_unclustered = True)
 ```
 
 #### Stitch regions
@@ -40,7 +40,7 @@ clustered = cluster(split_data = regs.split_data,
 from headss2 import stitch
 stitched = stitch(
     clustered_data = clustered,
-    split_columns: ["x", "y"],
+    cluster_columns: ["x", "y"],
     stitch_regions: regs.stitch_regions
 )
 ```
@@ -50,9 +50,9 @@ stitched = stitch(
 from headss2 import merge_clusters
 merged = merge_clusters(
   clustered = clustered,
-  group_col = "group",
+  cluster_col = "cluster",
   split_regions = regs.split_regions,
-  split_columns = ["x", "y"],
+  cluster_columns = ["x", "y"],
   n_cores = 16)
 ```
 

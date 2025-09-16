@@ -20,15 +20,15 @@ for n in [1500, 3000, 6000, 12_000, 24_000, 48_000, 96_000]:
     headss_merge(
         df=data_subset,
         N=2,
-        split_columns=SPLIT_COLUMNS,
+        cluster_columns=SPLIT_COLUMNS,
         merge=True,
         cluster_columns=SPLIT_COLUMNS,
         min_cluster_size=10,
         min_samples=10,
         cluster_method="eom",
         allow_single_cluster=False,
-        total_threshold=0.1,
-        overlap_threshold=0.5,
+        combined_overlap_threshold=0.1,
+        per_cluster_overlap_threshold=0.5,
         minimum_members=10,
     )
     t1 = time.time()
@@ -50,13 +50,13 @@ for n in [1500, 3000, 6000, 12_000, 24_000, 48_000, 96_000]:
     )
 
     stitched = stitching.stitch(
-        clustered, split_columns=SPLIT_COLUMNS, stitch_regions=regs.stitch_regions
+        clustered, cluster_columns=SPLIT_COLUMNS, stitch_regions=regs.stitch_regions
     )
     merging.merge_clusters(
         stitched,
-        group_col="group",
+        cluster_col="cluster",
         split_regions=h2_split_regions,
-        split_columns=["x", "y"],
+        cluster_columns=["x", "y"],
         n_cores=1,
     )
     t3 = time.time()
@@ -79,13 +79,13 @@ for n in [1500, 3000, 6000, 12_000, 24_000, 48_000, 96_000]:
     )
 
     stitched = stitching.stitch(
-        clustered, split_columns=SPLIT_COLUMNS, stitch_regions=regs.stitch_regions
+        clustered, cluster_columns=SPLIT_COLUMNS, stitch_regions=regs.stitch_regions
     )
     merging.merge_clusters(
         stitched,
-        group_col="group",
+        cluster_col="cluster",
         split_regions=h2_split_regions,
-        split_columns=["x", "y"],
+        cluster_columns=["x", "y"],
         n_cores=4,
     )
     t5 = time.time()

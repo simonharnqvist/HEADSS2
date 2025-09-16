@@ -1,141 +1,145 @@
 import pandas as pd
 from pyspark.sql import SparkSession, Row
+from pyspark import sql
 import pytest
 from headss2.merging import (
-    get_cluster_bounds,
-    find_overlapping_pairs,
-    chain_merge_clusters,
+    _get_cluster_bounds,
+    _find_overlapping_pairs,
+    _get_n_overlaps,
+    _apply_get_n_overlaps,
+    _assign_new_clusters,
+    _calculate_overlap_stats,
+    _merge_clusters_union_find,
+    _should_merge,
+    merge_clusters
 )
-
-
-# @pytest.fixture(scope="session")
-# def spark():
-#     return SparkSession.builder.master("local[*]").appName("test-regions").getOrCreate()
-
+from headss2.union_find import UnionFind
 
 @pytest.fixture
-def example_data(spark):
+def unified_cluster_data(spark):
+    """
+    Creates a unified dataset with:
+    - 3 clusters: cluster 1 and 2 partially overlap, 3 does not.
+    - Region is constant (0) for simplicity.
+    """
     data = [
-        # Group 1
-        [10.0, 20.0, 0, 1, 0],
-        [15.0, 25.0, 0, 1, 0],
-        [12.0, 18.0, 0, 1, 0],
-        # Group 2
-        [50.0, 60.0, 0, 2, 0],
-        [55.0, 58.0, 0, 2, 0],
-        [52.0, 62.0, 0, 2, 0],
-        # Group 3
-        [100.0, 200.0, 0, 3, 0],
-        [110.0, 210.0, 0, 3, 0],
-        [105.0, 190.0, 0, 3, 0],
+        # Cluster 1
+        [1.0, 1.0, 0, 1],
+        [2.0, 2.0, 0, 1],
+        [3.0, 3.0, 0, 1],
+
+        # Cluster 2 — partial overlap with Cluster 1
+        [2.1, 2.1, 0, 2],
+        [2.5, 2.5, 0, 2],
+        [4.0, 4.0, 0, 2],
+
+        # Cluster 3 — no overlap
+        [10.0, 10.0, 0, 3],
+        [11.0, 11.0, 0, 3],
+        [12.0, 12.0, 0, 3],
     ]
 
-    columns = ["x", "y", "region", "group", "index"]
-
+    columns = ["x", "y", "region", "cluster"]
     return spark.createDataFrame(pd.DataFrame(data, columns=columns))
 
+@pytest.fixture
+def cluster_bounds(unified_cluster_data):
+    return _get_cluster_bounds(unified_cluster_data, ["x", "y"])
 
 @pytest.fixture
-def cluster_bounds_df(spark):
-    data = [
-        Row(group=1, x_min=0, x_max=10, y_min=0, y_max=10),
-        Row(group=2, x_min=5, x_max=15, y_min=5, y_max=15),
-        Row(group=3, x_min=20, x_max=30, y_min=0, y_max=10),
-        Row(group=4, x_min=8, x_max=25, y_min=8, y_max=25),
-    ]
-    return spark.createDataFrame(data)
-
+def overlapping_pairs(cluster_bounds):
+    return _find_overlapping_pairs(cluster_bounds, ["x", "y"])
 
 @pytest.fixture
-def clustered_data(spark):
-    # Create small 2D clusters with partial overlap
-    data = [
-        # Cluster 1 (group = 1)
-        Row(x=1, y=1, group=1),
-        Row(x=2, y=2, group=1),
-        Row(x=3, y=3, group=1),
-        # Cluster 2 (group = 2) — partially overlaps with cluster 1
-        Row(x=2, y=2, group=2),
-        Row(x=3, y=3, group=2),
-        Row(x=4, y=4, group=2),
-        # Cluster 3 (group = 3) — no overlap
-        Row(x=10, y=10, group=3),
-        Row(x=11, y=11, group=3),
-        Row(x=12, y=12, group=3),
-    ]
-    return spark.createDataFrame(data)
-
-
-@pytest.fixture
-def overlap_pairs(spark):
-    # Only compare group 1 with 2, and 1 with 3
-    data = [
-        Row(group1=1, group2=2),
-        Row(group1=1, group2=3),
-    ]
-    return spark.createDataFrame(data)
-
-
-def test_get_cluster_bounds(example_data):
-    # Convert the example_data (pandas df) to Spark DataFrame
-
-    # Call the function with split columns x and y
-    result = get_cluster_bounds(
-        example_data, split_columns=["x", "y"], group_col="group"
+def overlap_stats_df(unified_cluster_data, cluster_bounds, overlapping_pairs):
+    return _apply_get_n_overlaps(
+        clustered=unified_cluster_data,
+        cluster_bounds=cluster_bounds,
+        overlapping_clusters=overlapping_pairs,
     )
 
-    # Collect result into Pandas for easy comparison
-    result_df = result.toPandas()
+@pytest.fixture
+def overlap_stats(overlap_stats_df):
+    return _calculate_overlap_stats(n_overlaps_df=overlap_stats_df)
 
-    expected = pd.DataFrame(
-        {
-            "group": [1, 2, 3],
-            "x_min": [10.0, 50.0, 100.0],
-            "x_max": [15.0, 55.0, 110.0],
-            "y_min": [18.0, 58.0, 190.0],
-            "y_max": [25.0, 62.0, 210.0],
-        }
-    )
+
+def test_get_cluster_bounds(unified_cluster_data):
+    result = _get_cluster_bounds(unified_cluster_data, cluster_columns=["x", "y"]).toPandas()
+
+    expected = pd.DataFrame({
+        "cluster": [1, 2, 3],
+        "x_min": [1.0, 2.1, 10.0],
+        "y_min": [1.0, 2.1, 10.0],
+        "x_max": [3.0, 4.0, 12.0],
+        "y_max": [3.0, 4.0, 12.0],
+    })
 
     pd.testing.assert_frame_equal(
-        expected,
-        result_df,
+        result.sort_values("cluster").reset_index(drop=True),
+        expected.sort_values("cluster").reset_index(drop=True),
         check_dtype=False,
-        check_index_type=False,
     )
 
+def test_find_overlapping_pairs(overlapping_pairs):
+    expected = pd.DataFrame({
+        "cluster1": [1],
+        "cluster2": [2],
+    })
 
-def test_find_overlapping_pairs(cluster_bounds_df):
-    result = find_overlapping_pairs(cluster_bounds_df, split_columns=["x", "y"])
-    result_df = (
-        result.toPandas().sort_values(by=["group1", "group2"]).reset_index(drop=True)
+    pd.testing.assert_frame_equal(
+        overlapping_pairs.sort_values(by=["cluster1", "cluster2"]).reset_index(drop=True),
+        expected.sort_values(by=["cluster1", "cluster2"]).reset_index(drop=True),
     )
 
-    # Define expected overlapping group pairs
-    expected = pd.DataFrame({"group1": [1, 1, 2, 3], "group2": [2, 4, 4, 4]})
+def test_apply_get_n_overlaps(overlap_stats_df):
+    # points [2.0, 2.0], [2.1,2.1] and [2.5, 2.5] overlap
+    assert int(overlap_stats_df.loc[0, "n_cluster1_in2"]) == 1 
+    assert int(overlap_stats_df.loc[0, "n_cluster2_in1"]) == 2  
 
-    expected = expected.sort_values(by=["group1", "group2"]).reset_index(drop=True)
+def test_calculate_overlap_stats(overlap_stats):
+    expected = pd.DataFrame([
+        {
+            "cluster1": 1,
+            "cluster2": 2,
+            "n_cluster1": 3,
+            "n_cluster2": 3,
+            "n_cluster1_in2": 1,
+            "n_cluster2_in1": 2,
+            "n_in_overlap": 3,
+            "n_total": 6,
+            "total_overlap_fraction": 0.5,
+            "per_cluster_overlap_fraction": 2 / 3,
+        }
+    ])
+    pd.testing.assert_frame_equal(overlap_stats, expected)
 
-    pd.testing.assert_frame_equal(result_df, expected)
+def test_should_merge_default_params(overlap_stats):
+    should_merge_df = _should_merge(
+        overlap_stats_df=overlap_stats,
+        per_cluster_overlap_threshold=0.1,
+        combined_per_cluster_overlap_threshold=0.5,
+        min_n_overlap=10
+    )
+    assert should_merge_df[should_merge_df["cluster1"] == 1]["should_merge"].values[0] == False
 
+def test_should_merge_modified_params(overlap_stats):
+    should_merge_df = _should_merge(
+        overlap_stats_df=overlap_stats,
+        per_cluster_overlap_threshold=0.1,
+        combined_per_cluster_overlap_threshold=0.5,
+        min_n_overlap=1
+    )
+    assert should_merge_df[should_merge_df["cluster1"] == 1]["should_merge"].values[0] == True    
 
-def test_chain_merge_clusters(spark):
-    # Create test input: group merge pairs
-    data = [
-        Row(group1=1, group2=2),
-        Row(group1=2, group2=3),
-        Row(group1=4, group2=5),
-    ]
-    spark.sparkContext.setCheckpointDir("/tmp/graphframe-checkpoints")
-    merge_pairs_df = spark.createDataFrame(data)
+def test_assign_new_clusters(unified_cluster_data, overlap_stats):
+    should_merge_df = _should_merge(
+        overlap_stats_df=overlap_stats,
+        per_cluster_overlap_threshold=0.1,
+        combined_per_cluster_overlap_threshold=0.5,
+        min_n_overlap=1
+    )
 
-    # Call function
-    result = chain_merge_clusters(merge_pairs_df)
-
-    # Collect and process output
-    result_dict = {row["group"]: row["merged_group"] for row in result.collect()}
-
-    # Check connected groups have the same component
-    assert result_dict[1] == result_dict[2] == result_dict[3]
-    assert result_dict[4] == result_dict[5]
-    assert result_dict[1] != result_dict[4]
+    union_find = _merge_clusters_union_find(should_merge_df=should_merge_df)
+    clustered_reassigned = _assign_new_clusters(union_find=union_find, clustered=unified_cluster_data)
+    
+    assert set(row['cluster'] for row in clustered_reassigned.select("cluster").distinct().collect()) == {2, 3}

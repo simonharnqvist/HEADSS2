@@ -23,7 +23,7 @@ def run_hdbscan(
     allow_single_cluster: bool,
     clustering_method: str,
     cluster_columns: List[str],
-    drop_ungrouped: bool = True,
+    drop_unclustered: bool = True,
     random_seed: int = 11,
 ) -> pd.DataFrame:
     """Cluster objects using HDBSCAN and return the labeled DataFrame and cluster count."""
@@ -39,15 +39,15 @@ def run_hdbscan(
     ).fit(df[cluster_columns])
 
     assert isinstance(df, pd.DataFrame)
-    df["group"] = clusterer.labels_
+    df["cluster"] = clusterer.labels_
 
-    if drop_ungrouped:
-        df = df[df["group"] != -1]
+    if drop_unclustered:
+        df = df[df["cluster"] != -1]
 
-    df["group"] = df["group"].apply(lambda x: f"{region}_{x}" if x != -1 else "-1")
+    df["cluster"] = df["cluster"].apply(lambda x: f"{region}_{x}" if x != -1 else "-1")
 
     if df.empty:
-        return pd.DataFrame(columns=list(df.columns) + ["group"])
+        return pd.DataFrame(columns=list(df.columns) + ["cluster"])
 
     df.index.rename("index", inplace=True)
 
@@ -61,7 +61,7 @@ def cluster(
     allow_single_cluster: bool,
     clustering_method: str,
     cluster_columns: List[str],
-    drop_ungrouped: bool = True,
+    drop_unclustered: bool = True,
 ) -> sql.DataFrame:
     """Perform HDBSCAN clustering on a Spark DataFrame, per region."""
 
@@ -75,25 +75,25 @@ def cluster(
             allow_single_cluster=allow_single_cluster,
             clustering_method=clustering_method,
             cluster_columns=cluster_columns,
-            drop_ungrouped=drop_ungrouped,
+            drop_unclustered=drop_unclustered,
         )
         assert not clustered_df.empty
-        assert "group" in clustered_df.columns
+        assert "cluster" in clustered_df.columns
         return clustered_df
 
     res = run_hdbscan_per_region(pdf=split_data.toPandas())
-    assert "group" in res.columns
+    assert "cluster" in res.columns
 
     schema_list = [
         StructField(col_name, FloatType(), True) for col_name in cluster_columns
     ] + [
         StructField("region", IntegerType(), True),
-        StructField("group", StringType(), True),
+        StructField("cluster", StringType(), True),
     ]
 
     output_schema = StructType(schema_list)
 
-    clustered = split_data.groupBy("region").applyInPandas(
+    clustered = split_data.clusterBy("region").applyInPandas(
         run_hdbscan_per_region,
         schema=output_schema,
     )

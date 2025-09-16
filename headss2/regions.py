@@ -13,13 +13,13 @@ import operator
 def get_split_regions(
     spark_session: sql.SparkSession,
     limits: np.ndarray,
-    split_columns: List[str],
+    cluster_columns: List[str],
     step: np.ndarray,
 ):
     rows = []
     for region_idx, mins in enumerate(limits):
         region_dict = {"region": region_idx}
-        for idx, col in enumerate(split_columns):
+        for idx, col in enumerate(cluster_columns):
             region_dict[f"{col}_min"] = float(mins[idx])
             region_dict[f"{col}_max"] = float(mins[idx] + step[idx])
         rows.append(sql.Row(**region_dict))
@@ -31,12 +31,12 @@ def get_stitch_regions(
     spark_session: sql.SparkSession,
     low_cuts: np.ndarray,
     high_cuts: np.ndarray,
-    split_columns: List[str],
+    cluster_columns: List[str],
 ) -> sql.DataFrame:
     rows = []
     for idx, (low, high) in enumerate(zip(low_cuts, high_cuts)):
         region_dict = {"region": idx}
-        for i, col_name in enumerate(split_columns):
+        for i, col_name in enumerate(cluster_columns):
             region_dict[f"{col_name}_min"] = float(low[i])
             region_dict[f"{col_name}_max"] = float(high[i])
         rows.append(sql.Row(**region_dict))
@@ -45,7 +45,7 @@ def get_stitch_regions(
 
 
 def get_step_and_limits(
-    df: sql.DataFrame, split_columns: List[str], n: int
+    df: sql.DataFrame, cluster_columns: List[str], n: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Returns:
@@ -53,13 +53,13 @@ def get_step_and_limits(
         limits: np.ndarray of region start coordinates (shape: [num_regions, num_dims])
     """
     agg_exprs = []
-    for c in split_columns:
+    for c in cluster_columns:
         agg_exprs += [F.min(c).alias(f"{c}_min"), F.max(c).alias(f"{c}_max")]
     stats = df.agg(*agg_exprs).collect()[0]
 
     mins = []
     steps = []
-    for c in split_columns:
+    for c in cluster_columns:
         c_min = stats[f"{c}_min"]
         c_max = stats[f"{c}_max"]
         step = (c_max - c_min) / n
@@ -72,15 +72,15 @@ def get_step_and_limits(
     ]
     limits = (
         np.array(np.meshgrid(*limits_per_dim, indexing="ij"))
-        .reshape(len(split_columns), -1)
+        .reshape(len(cluster_columns), -1)
         .T
     )
 
     return np.array(steps), limits
 
 
-def get_n_regions(n: int, split_columns: List[str]) -> int:
-    return (2 * n - 1) ** len(split_columns)
+def get_n_regions(n: int, cluster_columns: List[str]) -> int:
+    return (2 * n - 1) ** len(cluster_columns)
 
 
 def get_minima(limits: np.ndarray, step: np.ndarray) -> np.ndarray:
@@ -98,18 +98,18 @@ def get_maxima(limits: np.ndarray, step: np.ndarray) -> np.ndarray:
 
 
 def assign_regions(
-    df: sql.DataFrame, split_regions: sql.DataFrame, split_columns: list[str]
+    df: sql.DataFrame, split_regions: sql.DataFrame, cluster_columns: list[str]
 ) -> sql.DataFrame:
     joined = df.crossJoin(split_regions)
 
     conditions = [
         (col(col_name) >= col(f"{col_name}_min"))
         & (col(col_name) < col(f"{col_name}_max"))
-        for col_name in split_columns
+        for col_name in cluster_columns
     ]
 
     filtered = joined.filter(reduce(operator.and_, conditions))
-    selected_columns = split_columns + ["region"]
+    selected_columns = cluster_columns + ["region"]
     return filtered.select(*selected_columns)
 
 
@@ -129,7 +129,7 @@ def make_regions(
     spark_session: sql.SparkSession,
     df: sql.DataFrame | pd.DataFrame,
     n: int,
-    split_columns: List[str],
+    cluster_columns: List[str],
 ) -> Regions:
     """
     Computes regions for a DataFrame by assigning each row a region ID based on spatial bins,
@@ -139,7 +139,7 @@ def make_regions(
         spark_session: Active SparkSession.
         df: Input Spark or Pandas DataFrame.
         n: Number of bins per dimension.
-        split_columns: List of column names to split on.
+        cluster_columns: List of column names to split on.
 
     Returns:
         Regions: Contains region-annotated DataFrame and region metadata as pandas DataFrames.
@@ -148,7 +148,7 @@ def make_regions(
         df = spark_session.createDataFrame(df)
 
     # Compute step size and all region minima
-    step, limits = get_step_and_limits(df, split_columns, n)
+    step, limits = get_step_and_limits(df, cluster_columns, n)
 
     # Compute region boundaries
     low_cuts = get_minima(limits, step)
@@ -158,19 +158,19 @@ def make_regions(
     split_regions = get_split_regions(
         spark_session=spark_session,
         limits=limits,
-        split_columns=split_columns,
+        cluster_columns=cluster_columns,
         step=step,
     )
 
     # Assign region ID to each row
     split_data = assign_regions(
-        df=df, split_regions=split_regions, split_columns=["x", "y"]
+        df=df, split_regions=split_regions, cluster_columns=["x", "y"]
     )
     stitch_regions = get_stitch_regions(
         spark_session=spark_session,
         low_cuts=low_cuts,
         high_cuts=high_cuts,
-        split_columns=split_columns,
+        cluster_columns=cluster_columns,
     )
 
     return Regions(

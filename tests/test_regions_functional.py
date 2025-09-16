@@ -66,21 +66,21 @@ def a3_data(spark):
 @pytest.fixture
 def flame_regions(spark, flame_data):
     return regions.make_regions(
-        spark_session=spark, n=2, df=flame_data, split_columns=["x", "y"]
+        spark_session=spark, n=2, df=flame_data, cluster_columns=["x", "y"]
     )
 
 
 @pytest.fixture
 def spiral_regions(spark, spiral_data):
     return regions.make_regions(
-        spark_session=spark, n=2, df=spiral_data, split_columns=["x", "y"]
+        spark_session=spark, n=2, df=spiral_data, cluster_columns=["x", "y"]
     )
 
 
 @pytest.fixture
 def a3_regions(spark, a3_data):
     return regions.make_regions(
-        spark_session=spark, n=2, df=a3_data, split_columns=["x", "y"]
+        spark_session=spark, n=2, df=a3_data, cluster_columns=["x", "y"]
     )
 
 

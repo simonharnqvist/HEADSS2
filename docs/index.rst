@@ -56,7 +56,7 @@ Example usage
 .. code-block:: python
 
    from headss2 import regions
-   regs = regions.make_regions(df=data, n=2, split_columns=["x", "y"])
+   regs = regions.make_regions(df=data, n=2, cluster_columns=["x", "y"])
 
 
 **Cluster with HDBSCAN**
@@ -66,7 +66,7 @@ Example usage
    from headss2 import clustering
    clustered = clustering.cluster(split_data = regs.split_data, 
                min_cluster_size = 10, min_samples = 10, allow_single_cluster = False, 
-               cluster_method = "eom", cluster_columns = ["x", "y"], drop_ungrouped = True)
+               cluster_method = "eom", cluster_columns = ["x", "y"], drop_unclustered = True)
 
 
 **Stitch regions**
@@ -76,7 +76,7 @@ Example usage
    from headss2 import stitching
    stitched = stitching.stitch(
       clustered_data = clustered,
-      split_columns: ["x", "y"],
+      cluster_columns: ["x", "y"],
       stitch_regions: regs.stitch_regions
    )
 
@@ -88,9 +88,9 @@ Example usage
    from headss2 import merging
    merged = merging.merge_clusters(
    clustered = clustered,
-   group_col = "group",
+   cluster_col = "cluster",
    split_regions = regs.split_regions,
-   split_columns = ["x", "y"],
+   cluster_columns = ["x", "y"],
    n_cores = 16)
 
 

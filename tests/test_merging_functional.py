@@ -31,15 +31,14 @@ def test_merging_t4_8k(spark, t4_8k_clustered, t4_8k_merged):
     spark.sparkContext.setCheckpointDir("/tmp/spark-checkpoints")
 
     merged = merge_clusters(
-        spark=spark,
         clustered=t4_8k_clustered,
-        split_columns=["x", "y"],
-        min_merge_members=10,
-        overlap_merge_threshold=0.5,
-        total_merge_threshold=0.1,
+        cluster_columns=["x", "y"],
+        min_n_overlap=10,
+        per_cluster_per_cluster_overlap_threshold=0.5,
+        combined_per_cluster_overlap_threshold=0.1,
     )
 
-    column_order = ["x", "y", "region", "group", "index"]
+    column_order = ["x", "y", "region", "cluster", "index"]
 
     pd.testing.assert_frame_equal(
         merged.toPandas()[column_order],
