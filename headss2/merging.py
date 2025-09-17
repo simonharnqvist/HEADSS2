@@ -7,8 +7,6 @@ import numpy as np
 from headss2.union_find import UnionFind
 from itertools import chain
 
-spark = SparkSession.builder.getOrCreate()
-
 
 def _get_cluster_bounds(
     clustered: sql.DataFrame, cluster_columns: list[str]
@@ -54,28 +52,40 @@ def _find_overlapping_pairs(
     return overlapping_pairs.toPandas()
 
 
-def _get_n_overlaps(df: pd.DataFrame, cluster_bounds: sql.DataFrame, cluster1: int, cluster2: int):
+def _get_n_overlaps(df: pd.DataFrame, cluster_bounds: sql.DataFrame, cluster1: str, cluster2: str):
     """Pandas UDF to calculate number of points in overlap between two clusters"""
 
     cluster_bounds = cluster_bounds.toPandas()
 
+    if not isinstance(cluster1, str) or not isinstance(cluster2, str):
+        raise ValueError("Cluster names must be string")
+
     bounds2 = cluster_bounds[cluster_bounds["cluster"] == cluster2]
     bounds1 = cluster_bounds[cluster_bounds["cluster"] == cluster1]
 
+
+    if bounds1.empty or bounds2.empty:
+        return 0, 0
+    
+    b1 = bounds1.iloc[0]
+    b2 = bounds2.iloc[0]
+
+
     cluster1_in_2 = (
         (df["cluster"] == cluster1)
-        & (df["x"] >= float(bounds2["x_min"]))
-        & (df["x"] < float(bounds2["x_max"]))
-        & (df["y"] >= float(bounds2["y_min"]))
-        & (df["y"] < float(bounds2["y_max"])))
-
-    cluster2_in_1 = ((df["cluster"] == cluster2)
-        & (df["x"] >= float(bounds1["x_min"]))
-        & (df["x"] < float(bounds1["x_max"]))
-        & (df["y"] >= float(bounds1["y_min"]))
-        & (df["y"] < float(bounds1["y_max"]))
+        & (df["x"] >= b2["x_min"])
+        & (df["x"] < b2["x_max"])
+        & (df["y"] >= b2["y_min"])
+        & (df["y"] < b2["y_max"])
     )
 
+    cluster2_in_1 = (
+        (df["cluster"] == cluster2)
+        & (df["x"] >= b1["x_min"])
+        & (df["x"] < b1["x_max"])
+        & (df["y"] >= b1["y_min"])
+        & (df["y"] < b1["y_max"])
+    )
     return len(df[cluster1_in_2]), len(df[cluster2_in_1])
 
 
@@ -87,7 +97,7 @@ def _apply_get_n_overlaps(
     """Perform overlap calculations per cluster pair"""
     results = []
     for _, row in overlapping_clusters.iterrows():
-        cluster1, cluster2 = int(row["cluster1"]), int(row["cluster2"])
+        cluster1, cluster2 = row["cluster1"], row["cluster2"]
 
         clustered_subset = clustered.filter(
             (clustered.cluster == cluster1) | (clustered.cluster == cluster2)
@@ -146,12 +156,8 @@ def _merge_clusters_union_find(should_merge_df: pd.DataFrame) -> UnionFind:
 
 def _assign_new_clusters(union_find: UnionFind, clustered: sql.DataFrame) -> sql.DataFrame:
     """Assign new cluster IDs using union-find object"""
-    spark_replacement_map = F.create_map([F.lit(x) for x in chain(*union_find.parent.items())]) 
-    clustered = clustered.withColumn(
-        "cluster",
-        F.coalesce(spark_replacement_map.getItem(F.col("cluster")), F.col("cluster")))
-    
-    return clustered
+    replacement_dict = {str(x): str(union_find.find(x)) for x in union_find.parent.keys()}
+    return clustered.replace(to_replace=replacement_dict, subset=['cluster'])
 
 
 def merge_clusters(clustered: sql.DataFrame, cluster_columns: list[str], per_cluster_overlap_threshold: float = 0.1, combined_overlap_threshold: float = 0.5, min_n_overlap:int = 10) -> sql.DataFrame:
@@ -177,6 +183,7 @@ def merge_clusters(clustered: sql.DataFrame, cluster_columns: list[str], per_clu
         sql.DataFrame: DataFrame with clusters merged and reassigned.
     """
 
+    clustered = clustered.withColumn("cluster", F.col("cluster").cast("string"))
 
     cluster_bounds = _get_cluster_bounds(clustered=clustered, cluster_columns=cluster_columns)
     overlapping_clusters = _find_overlapping_pairs(cluster_bounds=cluster_bounds, cluster_columns=cluster_columns)

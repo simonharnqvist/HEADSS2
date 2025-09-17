@@ -13,7 +13,7 @@ from pyspark.sql import SparkSession
 def flame_regions_ground_truth():
     return pd.read_csv(
         "tests/ground_truth/flame_regions.csv", index_col=0
-    ).drop_duplicates(subset=["x", "y"])
+    )
 
 
 @pytest.fixture
@@ -32,7 +32,6 @@ def spiral_regions_ground_truth():
         pd.read_csv(
             "tests/ground_truth/spiral_regions.csv", dtype={"2": "Int64"}, index_col=0
         )
-        .drop_duplicates(subset=["x", "y"])
         .reset_index()
         .sort_values(by=["x", "y"])
     )
@@ -145,9 +144,6 @@ def test_flame_regions_stitch_match_ground_truth(
 def test_spiral_regions_match_ground_truth(spiral_regions_ground_truth, spiral_regions):
     expected = spiral_regions_ground_truth.copy()
     actual = spiral_regions.split_data.toPandas().sort_values(by=["x", "y"])
-
-    print(expected)
-    print(actual)
 
     expected.columns = expected.columns.map(str)
     actual.columns = actual.columns.map(str)

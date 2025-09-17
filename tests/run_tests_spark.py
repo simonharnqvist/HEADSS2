@@ -1,11 +1,5 @@
-import glob
-import os
 import pytest
+from pathlib import Path
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-tests_dir = os.path.join(base_dir, "tests")
-test_modules = glob.glob(tests_dir)
-
-#pytest.main(test_modules)
-pytest.main(["tests/test_merging.py"
-             ])
+tests_dir = Path(__file__).parent
+pytest.main([str(tests_dir)])

@@ -104,7 +104,7 @@ def assign_regions(
 
     conditions = [
         (col(col_name) >= col(f"{col_name}_min"))
-        & (col(col_name) < col(f"{col_name}_max"))
+        & (col(col_name) <= col(f"{col_name}_max"))
         for col_name in cluster_columns
     ]
 

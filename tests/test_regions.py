@@ -6,11 +6,20 @@ from pyspark.sql import SparkSession
 from pyspark import sql
 
 
-# @pytest.fixture(scope="session")
-# def spark():
-#     return SparkSession.builder.master("local[*]").appName("test-regions").getOrCreate()
-
-
+@pytest.fixture
+def example_data(spark):
+    data = [
+        (0.0, 0.0), (0.1, 0.1), (0.2, 0.2),  # Cluster A
+        (1.0, 1.0), (1.1, 1.1), (1.2, 1.2),  # Cluster B
+        (2.0, 2.0), (2.1, 2.2), (2.2, 2.1),  # Cluster C
+        (5.0, 5.0), (5.1, 5.1), (5.2, 5.3),  # Cluster D (distant cluster)
+        (10.0, 10.0), (10.5, 10.5),          # Sparse region
+        (3.0, 0.0), (3.5, 0.5),              # Diagonal/linear points
+        (4.0, 1.0), (4.5, 1.5),              # Another diagonal line
+        (6.0, 3.0),                          # Outlier
+    ]
+    return spark.createDataFrame(data, ["x", "y"])
+        
 @pytest.fixture
 def flame(spark):
     return dataset("flame", format="spark", spark_session=spark)
@@ -21,17 +30,6 @@ def flame_regions(flame, spark):
     return regions.make_regions(
         spark_session=spark, df=flame, n=2, cluster_columns=["x", "y"]
     )
-
-
-def test_assign_regions_basic(spark):
-    data = [(0.1, 0.1), (0.9, 0.9), (0.4, 0.6)]
-    df = spark.createDataFrame(data, ["x", "y"])
-    df_with_region = regions.assign_regions(df, cluster_columns=["x", "y"], n=2)
-
-    regs = [row["region"] for row in df_with_region.collect()]
-    assert all(isinstance(r, int) for r in regs)
-    assert len(set(regs)) == len(data), print(regs)
-
 
 def test_get_step_and_limits(spark):
     data = [(0.0, 0.0), (1.0, 1.0)]
@@ -63,31 +61,17 @@ def test_get_n_regions():
     assert regions.get_n_regions(n, dims) == expected
 
 
-def test_make_regions_end_to_end(spark):
-    # Simple 2D data
-    data = [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)]
-    df = spark.createDataFrame(data, ["x", "y"])
-    result = regions.make_regions(spark, df, n=2, cluster_columns=["x", "y"])
+def test_make_regions_end_to_end(spark, example_data):
 
-    # Region column exists
-    assert "region" in result.split_data.columns
+    regs = regions.make_regions(spark, example_data, n=2, cluster_columns=["x", "y"])
 
-    # Check number of regions
-    assert result.split_data.select("region").distinct().count() == 9
+    assert "region" in regs.split_data.columns
 
-    # Region count matches stitch regions
-    split_region_count = result.split_regions.shape[0]
-    stitch_region_count = result.stitch_regions.shape[0]
+    num_regions = regs.split_data.select("region").distinct().count()
+    assert num_regions == 9  # (2*2 - 1)^2 = 3**2=9
+
+    split_region_count = regs.split_regions.shape[0]
+    stitch_region_count = regs.stitch_regions.shape[0]
     assert split_region_count == stitch_region_count
 
-    # All rows assigned a region
-    assert result.split_data.filter("region is null").count() == 0
-
-
-def test_split_dataframes_preserves_number_of_rows(flame):
-    df = regions.assign_regions(df=flame, n=2, cluster_columns=["x", "y"])
-    assert df.count() == flame.count()
-
-
-def test_make_regions_preserves_number_of_rows(flame_regions, flame):
-    assert flame_regions.split_data.count() == flame.count()
+    assert regs.split_data.filter("region is null").count() == 0

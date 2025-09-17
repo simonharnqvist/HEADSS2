@@ -93,7 +93,7 @@ def cluster(
 
     output_schema = StructType(schema_list)
 
-    clustered = split_data.clusterBy("region").applyInPandas(
+    clustered = split_data.groupBy("region").applyInPandas(
         run_hdbscan_per_region,
         schema=output_schema,
     )
