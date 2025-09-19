@@ -7,15 +7,15 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "hdbscan==0.8.39",
-    "matplotlib==3.10.3",
-    "mypy==1.17.0",
-    "numpy==2.3.0",
-    "pandas==2.3.0",
-    "scipy==1.15.2",
-    "seaborn==0.13.2",
-    "setuptools==80.9.0",
-    "pyspark==4.0.0",
+    "hdbscan>=0.8.39",
+    "matplotlib>=3.10.3",
+    "mypy>=1.17.0",
+    "numpy>=2.3.0",
+    "pandas>=2.3.0",
+    "scipy>=1.15.2",
+    "seaborn>=0.13.2",
+    "setuptools>=80.9.0",
+    "pyspark>=4.0.0",
     "pyarrow>=11.0.0"
 ]
 

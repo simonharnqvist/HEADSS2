@@ -65,9 +65,11 @@ def get_centers(
         raise ValueError(
             f"'clustered' expected to be a Spark DataFrame, found {type(clustered)}"
         )
-
+    
+    print(clustered.select("region").distinct().head())
+    
     regions = (
-        clustered.select("region").distinct().rdd.map(lambda r: r["region"]).collect()
+        clustered.select("region").distinct().toPandas()["region"].to_list()
     )
 
     centers_list = []
@@ -142,5 +144,17 @@ def stitch(
         raise ValueError(
             f"'clustered' must be a Spark dataframe, found {type(clustered)}"
         )
+    
+    if not cluster_columns or len(cluster_columns) < 1:
+        raise ValueError("Cluster columns not provided")
+    
+    for col in ["region", "cluster"] + cluster_columns:
+        if col not in clustered.columns:
+            raise KeyError(f"Missing column '{col}'. Found {clustered.columns}")
+        
+    print(clustered.schema)
+
+
+
     centers = get_centers(clustered, cluster_columns)
     return stitch_clusters(clustered, centers, stitch_regions, cluster_columns)

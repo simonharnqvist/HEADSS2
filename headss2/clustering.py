@@ -49,9 +49,17 @@ def run_hdbscan(
     if df.empty:
         return pd.DataFrame(columns=list(df.columns) + ["cluster"])
 
-    df.index.rename("index", inplace=True)
+    df = df.reset_index(drop=True)
+    df.index = pd.RangeIndex(start=0, stop=len(df), step=1)
+    df = df.loc[:, ~df.columns.str.contains("^__index")]
 
-    return df
+    if len(df.columns) != len(cluster_columns) + len(["cluster", "region"]):
+        raise ValueError("Incorrect number of dimensions returned from inner function")
+    
+    print("Returned columns:", df.columns.tolist())
+    print("Returned shape:", df.shape)
+
+    return df[cluster_columns + ["region", "cluster"]]
 
 
 def cluster(
@@ -66,6 +74,7 @@ def cluster(
     """Perform HDBSCAN clustering on a Spark DataFrame, per region."""
 
     def run_hdbscan_per_region(pdf: pd.DataFrame) -> pd.DataFrame:
+
         region_id = pdf["region"].iloc[0]
         clustered_df = run_hdbscan(
             df=pdf,
@@ -77,12 +86,9 @@ def cluster(
             cluster_columns=cluster_columns,
             drop_unclustered=drop_unclustered,
         )
-        assert not clustered_df.empty
-        assert "cluster" in clustered_df.columns
-        return clustered_df
-
-    res = run_hdbscan_per_region(pdf=split_data.toPandas())
-    assert "cluster" in res.columns
+        if len(pdf.columns) != len(cluster_columns) + len(["cluster", "region"]):
+            raise ValueError("Incorrect number of dimensions returned from inner function")
+        return clustered_df[["x", "y", "region", "cluster"]].reset_index(drop=True)
 
     schema_list = [
         StructField(col_name, FloatType(), True) for col_name in cluster_columns
@@ -92,6 +98,9 @@ def cluster(
     ]
 
     output_schema = StructType(schema_list)
+
+    print("Schema columns:", [f.name for f in output_schema.fields])
+
 
     clustered = split_data.groupBy("region").applyInPandas(
         run_hdbscan_per_region,
