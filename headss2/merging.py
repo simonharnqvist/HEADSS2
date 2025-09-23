@@ -160,7 +160,7 @@ def _assign_new_clusters(union_find: UnionFind, clustered: sql.DataFrame) -> sql
     return clustered.replace(to_replace=replacement_dict, subset=['cluster'])
 
 
-def merge_clusters(clustered: sql.DataFrame, cluster_columns: list[str], per_cluster_overlap_threshold: float = 0.1, combined_overlap_threshold: float = 0.5, min_n_overlap:int = 10) -> sql.DataFrame:
+def cluster_merge(clustered: sql.DataFrame, cluster_columns: list[str], per_cluster_overlap_threshold: float = 0.1, combined_overlap_threshold: float = 0.5, min_n_overlap:int = 10) -> sql.DataFrame:
     """
     Merges overlapping clusters based on defined overlap thresholds.
 

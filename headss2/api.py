@@ -1,6 +1,6 @@
 from pyspark import sql
 import pandas as pd
-from headss2 import make_regions, cluster, stitch, merge_clusters
+from headss2 import make_regions, cluster, stitch, cluster_merge
 
 
 class HEADSS2:
@@ -53,12 +53,16 @@ class HEADSS2:
         self.merged = None
 
     def fit(self, data: sql.DataFrame | pd.DataFrame, cluster_on: list[str]):
+        print(f"merge_clusters in fit: {self.merge_clusters}")
+
         regs = make_regions(
             spark_session=self.spark_session,
             df=data,
             n=self.n,
             cluster_columns=cluster_on,
         )
+
+        print(self.merge_clusters)
 
         self.regions = regs
         self.data = data
@@ -85,10 +89,17 @@ class HEADSS2:
         self.stitched = stitched
 
         if self.merge_clusters:
-            self.merged = merge_clusters(
-                clustered=clustered,
+            merged = cluster_merge(
+                clustered=stitched,
                 cluster_columns=cluster_on,
                 min_n_overlap=self.min_n_overlap,
                 per_cluster_overlap_threshold=self.per_cluster_overlap_threshold,
                 combined_overlap_threshold=self.combined_overlap_threshold,
             )
+            print("returning merged")
+            self.merged = merged
+            return merged
+        
+        else:
+            print("returning stitched")
+            return stitched
