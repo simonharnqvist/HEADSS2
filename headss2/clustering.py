@@ -69,7 +69,10 @@ def run_hdbscan(
         arrow_table = arrow_table.append_column("cluster", labels_arr)
 
     if drop_unclustered:
-        arrow_table = arrow_table.filter(pc.not_equal(arrow_table["cluster"], pa.scalar("-1", type=pa.string())))
+        arrow_table_filtered = arrow_table.filter(pc.not_equal(arrow_table["cluster"], pa.scalar("-1", type=pa.string())))
+        print(f"Dropped {len(arrow_table) - len(arrow_table_filtered)} missing")
+        arrow_table = arrow_table_filtered
+
 
     prefix = pa.array([f"{region}"] * len(arrow_table), type=pa.string())
 
@@ -98,11 +101,14 @@ def cluster(
     Perform HDBSCAN clustering on a Spark DataFrame, by region, using applyInArrow.
     """
 
-    def run_hdbscan_per_region_arrow(region_key, table: pa.Table) -> pa.Table:
-        if isinstance(region_key, tuple):
-            region_id = region_key[0].as_py()
-        else:
-            region_id = region_key.as_py()
+    split_data = split_data.cache()
+
+    def run_hdbscan_per_region_arrow(table: pa.Table) -> pa.Table:
+        region_col = table.column("region")
+        unique_regions = set(region_col.to_pylist())
+
+        assert len(unique_regions) == 1, f"Expected only one region, got: {unique_regions}"
+        region_id = unique_regions.pop()
 
         return run_hdbscan(
             arrow_table=table,

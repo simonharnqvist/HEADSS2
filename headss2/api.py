@@ -77,6 +77,7 @@ class HEADSS2:
             cluster_columns=cluster_on,
             drop_unclustered=self.drop_unclustered,
         )
+        clustered = clustered.cache()
 
         self.clustered = clustered
 
@@ -95,6 +96,7 @@ class HEADSS2:
                 min_n_overlap=self.min_n_overlap,
                 per_cluster_overlap_threshold=self.per_cluster_overlap_threshold,
                 combined_overlap_threshold=self.combined_overlap_threshold,
+                split_regions = self.regions.split_regions
             )
             print("returning merged")
             self.merged = merged
