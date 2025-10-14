@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from headss2.merging import merge_clusters
+from headss2.merging import cluster_merge
 from pyspark.sql import SparkSession
 
 @pytest.fixture

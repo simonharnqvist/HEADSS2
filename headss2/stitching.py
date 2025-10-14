@@ -65,8 +65,7 @@ def get_centers(
         raise ValueError(
             f"'clustered' expected to be a Spark DataFrame, found {type(clustered)}"
         )
-    
-    print(clustered.select("region").distinct().head())
+
     
     regions = (
         clustered.select("region").distinct().toPandas()["region"].to_list()
@@ -151,8 +150,6 @@ def stitch(
     for col in ["region", "cluster"] + cluster_columns:
         if col not in clustered.columns:
             raise KeyError(f"Missing column '{col}'. Found {clustered.columns}")
-        
-    print(clustered.schema)
 
 
 

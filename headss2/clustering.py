@@ -70,7 +70,6 @@ def run_hdbscan(
 
     if drop_unclustered:
         arrow_table_filtered = arrow_table.filter(pc.not_equal(arrow_table["cluster"], pa.scalar("-1", type=pa.string())))
-        print(f"Dropped {len(arrow_table) - len(arrow_table_filtered)} missing")
         arrow_table = arrow_table_filtered
 
 

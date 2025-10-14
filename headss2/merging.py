@@ -2,7 +2,6 @@ from pyspark.sql import SparkSession, Row, functions as F
 from pyspark import sql
 from pyspark.sql.functions import pandas_udf
 import pandas as pd
-from typing import Iterable, Iterator
 import numpy as np
 from headss2.union_find import UnionFind
 from itertools import chain
@@ -52,16 +51,13 @@ def _find_overlapping_pairs(
     return overlapping_pairs.toPandas()
 
 def _bound_region_point_overlap(clustered_df, cluster_ids, split_regions, cluster_cols, minimum_members):
-    # Isolate clusters
     cluster1, cluster2 = cluster_ids
     cluster1_df = clustered_df[clustered_df["cluster"] == cluster1]
     cluster2_df = clustered_df[clustered_df["cluster"] == cluster2]
 
-    # Get regions
     cluster1_region = int(cluster1_df["region"].iloc[0])
     cluster2_region = int(cluster2_df["region"].iloc[0])
 
-    # Assume stitch_regions is indexed by 'region'
     split_regions_indexed = split_regions.set_index("region")
 
     limits1 = [[
@@ -74,7 +70,6 @@ def _bound_region_point_overlap(clustered_df, cluster_ids, split_regions, cluste
         split_regions_indexed.loc[cluster2_region, f"{col}_max"]
     ] for col in cluster_cols]
 
-    # Apply bounds only on differing limits
     for i, col in enumerate(cluster_cols):
         if limits1[i] != limits2[i]:
             cluster2_df = cluster2_df[cluster2_df[col] > float(limits1[i][0])]
@@ -106,15 +101,16 @@ class OverlapStats:
     bound_region_point_overlap: float
     total_point_overlap: float
 
-def _compute_overlap_stats(data: pd.DataFrame, split_regions: pd.DataFrame, cluster_cols: list[str], pairs_df: pd.DataFrame, minimum_members: int) -> pd.DataFrame:
+def _compute_overlap_stats(data: sql.DataFrame, split_regions: pd.DataFrame, cluster_cols: list[str], pairs_df: pd.DataFrame, minimum_members: int) -> pd.DataFrame:
     stats = []
 
     for row in pairs_df.itertuples():
         c1, c2 = row.cluster1, row.cluster2
 
-        cluster1_df = data[data["cluster"] == c1]
-        cluster2_df = data[data["cluster"] == c2]
+        cluster1_df = data.filter(data.cluster == c1).toPandas()
+        cluster2_df = data.filter(data.cluster == c2).toPandas()
         data_subset = pd.concat([cluster1_df, cluster2_df])
+
 
         merged = pd.merge(
             cluster1_df,
@@ -134,19 +130,16 @@ def _compute_overlap_stats(data: pd.DataFrame, split_regions: pd.DataFrame, clus
                                            minimum_members=minimum_members)
 
         tpo = _calculate_total_point_overlap(n_overlap, n1, n2)
-
-        print(c1, c2, brpo, tpo)
-
         stats.append(OverlapStats(c1, c2, n_overlap, n1, n2, brpo, tpo))
 
     return pd.DataFrame([s.__dict__ for s in stats])
 
 
-def _should_merge(overlap_stats_df: pd.DataFrame, per_cluster_overlap_threshold: float, combined_overlap_threshold: float, min_n_overlap: int) -> pd.DataFrame:
+def _should_merge(overlap_stats_df: pd.DataFrame, bound_region_point_overlap_threshold: float, total_point_overlap_threshold: float, min_n_overlap: int) -> pd.DataFrame:
     df = overlap_stats_df.copy()
     df["should_merge"] = (
-        (df["total_point_overlap"] >= combined_overlap_threshold) &
-        (df["bound_region_point_overlap"] >= per_cluster_overlap_threshold) &
+        (df["total_point_overlap"] >= total_point_overlap_threshold) &
+        (df["bound_region_point_overlap"] >= bound_region_point_overlap_threshold) &
         (df["n_overlap"] >= min_n_overlap)
     )
     return df
@@ -169,47 +162,32 @@ def _assign_new_clusters(union_find: UnionFind, clustered: sql.DataFrame) -> sql
 
 
 def cluster_merge(clustered: sql.DataFrame, cluster_columns: list[str], split_regions: pd.DataFrame,
-                  per_cluster_overlap_threshold: float = 0.1, combined_overlap_threshold: float = 0.5, min_n_overlap:int = 10, min_members = 10) -> sql.DataFrame:
-    """
-    Merges overlapping clusters based on defined overlap thresholds.
+                  bound_region_point_overlap_threshold: float = 0.1, total_point_overlap_threshold: float = 0.5, min_n_overlap:int = 10, min_members = 10) -> sql.DataFrame:
+    """Merge clusters based on overlaps.
 
     Args:
-        clustered (sql.DataFrame): Input DataFrame containing data points with assigned cluster labels.
-        cluster_columns (list[str]): Column names used to define the clustering dimensions.
-        per_cluster_overlap_threshold (float): 
-            Minimum threshold for per-cluster overlap. A merge is allowed only if:
-                max(n_overlap / n_cluster1, n_overlap / n_cluster2) > threshold.
-            This checks how much one cluster is embedded in another.
-            (Formerly called `total_threshold`). Default is 0.1.
-        combined_overlap_threshold (float): 
-            Minimum threshold for total (combined) overlap. A merge is allowed only if:
-                (n_overlap / (n_cluster1 + n_cluster2)) > threshold.
-            This ensures the overlap is significant in absolute terms.
-            (Formerly called `overlap_threshold`). Default is 0.5.
-        min_n_overlap (int): Minimum number of overlapping points required to consider a merge. Default is 10.
+        clustered (sql.DataFrame): Clustered data.
+        cluster_columns (list[str]): Columns that we clustered on.
+        split_regions (pd.DataFrame): Split regions data.
+        bound_region_point_overlap_threshold (float | None, optional): Minimum threshold for merging: fraction of joint data points lying within the bound overlap region divided by the smallest of the two clusters. Previously known as 'total threshold'. Defaults to 0.5.
+        total_point_overlap_threshold (float | None, optional): Minimum threshold for merging: fraction of all joint data points divided by the smallest of the two clusters. Previously known as 'overlap threshold'. Defaults to 0.1.
+        min_n_overlap (int | None, optional): Minimum number of overlapping points to allow merging. Defaults to 10.        
+        min_members (int, optional): Minimum number of members per cluster. Defaults to 10.
 
     Returns:
-        sql.DataFrame: DataFrame with clusters merged and reassigned.
+        sql.DataFrame: Clustered data with merged clusters.
     """
+
     clustered = clustered.withColumn("cluster", F.col("cluster").cast("string"))
 
-    # Step 1: Compute cluster bounds
     cluster_bounds = _get_cluster_bounds(clustered, cluster_columns)
 
-    # Step 2: Identify candidate overlapping clusters
     overlap_pairs = _find_overlapping_pairs(cluster_bounds, cluster_columns)
 
-    # Step 3: Convert data to Pandas for pairwise comparison
-    data = clustered.toPandas()
+    stats_df = _compute_overlap_stats(data=clustered, split_regions=split_regions, cluster_cols=cluster_columns, pairs_df=overlap_pairs, minimum_members=min_members)
 
-    # Step 4: Compute overlap stats for each pair
-    stats_df = _compute_overlap_stats(data=data, split_regions=split_regions, cluster_cols=cluster_columns, pairs_df=overlap_pairs, minimum_members=min_members)
+    should_merge_df = _should_merge(stats_df, bound_region_point_overlap_threshold, total_point_overlap_threshold, min_n_overlap)
 
-    # Step 5: Filter which overlaps should result in merges
-    should_merge_df = _should_merge(stats_df, per_cluster_overlap_threshold, combined_overlap_threshold, min_n_overlap)
-
-    # Step 6: Merge clusters using union-find
     uf = _merge_clusters_union_find(should_merge_df)
 
-    # Step 7: Reassign clusters in the original Spark DataFrame
     return _assign_new_clusters(uf, clustered)
