@@ -1,15 +1,8 @@
-HEADSS2 documentation
+HEADSS2 
 =====================
 This is the new version of HEADSS: *HiErArchical Data Splitting and Stitching Software for Non-Distributed Clustering Algorithms*. HEADSS2 provides a more predicable API, and enables parallelisation of the most compute-intense steps of the algorithm.
 
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   api
-
-
+For docs, go to https://headss2.readthedocs.io/en/latest/
 
 HEADSS
 ******
@@ -25,19 +18,22 @@ Example split and stitch boundaries for n = 3 implementation, where n refers to 
 .. image:: https://user-images.githubusercontent.com/84581147/170474111-fe226e70-14d4-4408-b4f0-61451f06b48a.png
 
 
-The current version supports clustering with HDBSCAN.
+
+The current version supports clustering with HDBSCAN:
    McInnes L, Healy J. Accelerated Hierarchical Density Based Clustering In: 2017 IEEE International Conference on Data Mining Workshops (ICDMW), IEEE, pp 33-42. 2017
 
 With the ability to split and stitch data while clustering independently if alternative clustering methods are preferred.
 
 Installation
 ************
-Currently, HEADSS2 can be installed from github: `pip install git+https://github.com/simonharnqvist/HEADSS2.git`
+Currently, HEADSS2 can be installed from github: 
+.. code-block:: bash
+   pip install git+https://github.com/simonharnqvist/HEADSS2.git
 
 Example datasets
 ****************
 
-The following example datasets are provided with HEADSS2:
+The following example datasets are provided with HEADSS2 available as `headss2.dataset(dataset_name)`:
 
 .. image:: https://raw.githubusercontent.com/simonharnqvist/HEADSS2/refs/heads/docs/datasets.png
 
@@ -45,6 +41,8 @@ Example usage
 *************
 
 **Simplified API**
+
+
 
 .. code-block:: python
 
