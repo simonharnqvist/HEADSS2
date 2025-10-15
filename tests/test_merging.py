@@ -5,13 +5,10 @@ import pytest
 from headss2.merging import (
     _get_cluster_bounds,
     _find_overlapping_pairs,
-    _get_n_overlaps,
-    _apply_get_n_overlaps,
-    _assign_new_clusters,
-    _calculate_overlap_stats,
-    _merge_clusters_union_find,
+    _total_point_overlap,
     _should_merge,
-    merge_clusters
+    _assign_new_clusters,
+    _merge_clusters_union_find
 )
 from headss2.union_find import UnionFind
 
@@ -19,7 +16,7 @@ from headss2.union_find import UnionFind
 def unified_cluster_data(spark):
     """
     Creates a unified dataset with:
-    - 3 clusters: cluster 1 and 2 partially overlap, 3 does not.
+    - 3 clusters: cluster 1 and 2 partially overlap in bounds, 3 does not.
     - Region is constant (0) for simplicity.
     """
     data = [
@@ -52,17 +49,14 @@ def overlapping_pairs(cluster_bounds):
     return _find_overlapping_pairs(cluster_bounds, ["x", "y"])
 
 @pytest.fixture
-def overlap_stats_df(unified_cluster_data, cluster_bounds, overlapping_pairs):
-    return _apply_get_n_overlaps(
-        clustered=unified_cluster_data,
-        cluster_bounds=cluster_bounds,
-        overlapping_clusters=overlapping_pairs,
+def dummy_overlap_stats():
+    return pd.DataFrame([
+        ["0_1", "0_2", 0.5, 1.0, 3],
+        ["0_1", "0_3", 0.6, 0.01, 4],
+        ["2_1", "2_2", 0.1, 0.9, 5],
+        ["2_2", "2_3", 0.4, 0.4, 6]],
+        columns=["cluster1", "cluster2", "total_point_overlap", "bound_region_point_overlap", "n_overlap"]
     )
-
-@pytest.fixture
-def overlap_stats(overlap_stats_df):
-    return _calculate_overlap_stats(n_overlaps_df=overlap_stats_df)
-
 
 def test_get_cluster_bounds(unified_cluster_data):
     result = _get_cluster_bounds(unified_cluster_data, cluster_columns=["x", "y"]).toPandas()
@@ -83,8 +77,8 @@ def test_get_cluster_bounds(unified_cluster_data):
 
 def test_find_overlapping_pairs(overlapping_pairs):
     expected = pd.DataFrame({
-        "cluster1": ["1"],
-        "cluster2": ["2"],
+        "cluster1": ["2"],
+        "cluster2": ["1"],
     })
 
     pd.testing.assert_frame_equal(
@@ -92,55 +86,54 @@ def test_find_overlapping_pairs(overlapping_pairs):
         expected.sort_values(by=["cluster1", "cluster2"]).reset_index(drop=True),
     )
 
-def test_apply_get_n_overlaps(overlap_stats_df):
-    # points [2.0, 2.0], [2.1,2.1] and [2.5, 2.5] overlap
-    assert int(overlap_stats_df.loc[0, "n_cluster1_in2"]) == 1 
-    assert int(overlap_stats_df.loc[0, "n_cluster2_in1"]) == 2  
+def test_total_point_overlap():
+    n_merged = 20
+    n_cluster1 = 20
+    n_cluster2 = 40
+    tpo_calculated = _total_point_overlap(n_merged = n_merged, n_cluster1 = n_cluster1, n_cluster2 = n_cluster2)
+    assert tpo_calculated == 1
 
-def test_calculate_overlap_stats(overlap_stats):
-    expected = pd.DataFrame([
-        {
-            "cluster1": "1",
-            "cluster2": "2",
-            "n_cluster1": 3,
-            "n_cluster2": 3,
-            "n_cluster1_in2": 1,
-            "n_cluster2_in1": 2,
-            "n_in_overlap": 3,
-            "n_total": 6,
-            "total_overlap_fraction": 0.5,
-            "per_cluster_overlap_fraction": 2 / 3,
-        }
-    ])
-    pd.testing.assert_frame_equal(overlap_stats, expected)
+def test_should_merge(dummy_overlap_stats):
+    brpo_thresh = 0.5
+    tpo_thresh = 0.1
+    n_overlap_thresh = 4
 
-def test_should_merge_default_params(overlap_stats):
-    should_merge_df = _should_merge(
-        overlap_stats_df=overlap_stats,
-        per_cluster_overlap_threshold=0.1,
-        combined_per_cluster_overlap_threshold=0.5,
-        min_n_overlap=10
-    )
-    assert should_merge_df[should_merge_df["cluster1"] == "1"]["should_merge"].values[0] == False
+    should_merge_df = _should_merge(overlap_stats_df=dummy_overlap_stats, bound_region_point_overlap_threshold=brpo_thresh, total_point_overlap_threshold=tpo_thresh, min_n_overlap=n_overlap_thresh)
 
-def test_should_merge_modified_params(overlap_stats):
-    should_merge_df = _should_merge(
-        overlap_stats_df=overlap_stats,
-        per_cluster_overlap_threshold=0.1,
-        combined_per_cluster_overlap_threshold=0.5,
-        min_n_overlap=1
-    )
-    assert should_merge_df[should_merge_df["cluster1"] == "1"]["should_merge"].values[0] == True    
+    expected = [
+        False, # n_overlap too low
+        False, # brpo too low
+        True, # all above thresh
+        False, # tpo too low
+    ]
 
-def test_assign_new_clusters(unified_cluster_data, overlap_stats):
-    should_merge_df = _should_merge(
-        overlap_stats_df=overlap_stats,
-        per_cluster_overlap_threshold=0.1,
-        combined_per_cluster_overlap_threshold=0.5,
-        min_n_overlap=1
-    )
+    assert list(should_merge_df["should_merge"]) == expected
 
-    union_find = _merge_clusters_union_find(should_merge_df=should_merge_df)
-    clustered_reassigned = _assign_new_clusters(union_find=union_find, clustered=unified_cluster_data)
-    
-    assert set(row['cluster'] for row in clustered_reassigned.select("cluster").distinct().collect()) == {"2", "3"}
+def test_assign_new_clusters(spark, dummy_overlap_stats):
+    should_merge_df = _should_merge(overlap_stats_df=dummy_overlap_stats, bound_region_point_overlap_threshold=0.5, total_point_overlap_threshold=0.1, min_n_overlap=4)
+    uf = _merge_clusters_union_find(should_merge_df)
+
+    dummy_clustered = spark.createDataFrame(pd.DataFrame(
+        [
+            [1, 2, "0_1"], # x/y vals are irrelevant for this test
+            [2, 3, "0_2"],
+            [2, 4, "0_3"],
+            [9, 2, "2_1"],
+            [9, 4, "2_2"],
+            [11, 6, "2_3"]
+        ],
+        columns=["x", "y", "cluster"]
+    ))
+
+    clustered_new = _assign_new_clusters(union_find = uf, clustered = dummy_clustered)
+    clusters = list(clustered_new.toPandas()["cluster"].unique())
+
+    assert len(clusters) == 5 # 2_1 and 2_2 should merge, all else the same
+
+    if "2_1" in clusters:
+        assert "2_2" not in clusters
+    elif "2_2" in clusters:
+        assert "2_1" not in clusters
+
+    for cluster in ["0_1", "0_2", "0_3", "2_3"]:
+        assert cluster in clusters

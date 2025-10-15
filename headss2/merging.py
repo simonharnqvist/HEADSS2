@@ -87,7 +87,7 @@ def _bound_region_point_overlap(clustered_df, cluster_ids, split_regions, cluste
     return max(frac1, frac2)
 
 
-def _calculate_total_point_overlap(n_merged: int, n_cluster1: int, n_cluster2: int):
+def _total_point_overlap(n_merged: int, n_cluster1: int, n_cluster2: int):
     return max(n_merged/n_cluster1 if n_cluster1 else 0, n_merged/n_cluster2 if n_cluster2 else 0)
 
 
@@ -129,7 +129,7 @@ def _compute_overlap_stats(data: sql.DataFrame, split_regions: pd.DataFrame, clu
                                            split_regions=split_regions,
                                            minimum_members=minimum_members)
 
-        tpo = _calculate_total_point_overlap(n_overlap, n1, n2)
+        tpo = _total_point_overlap(n_overlap, n1, n2)
         stats.append(OverlapStats(c1, c2, n_overlap, n1, n2, brpo, tpo))
 
     return pd.DataFrame([s.__dict__ for s in stats])
@@ -137,6 +137,10 @@ def _compute_overlap_stats(data: sql.DataFrame, split_regions: pd.DataFrame, clu
 
 def _should_merge(overlap_stats_df: pd.DataFrame, bound_region_point_overlap_threshold: float, total_point_overlap_threshold: float, min_n_overlap: int) -> pd.DataFrame:
     df = overlap_stats_df.copy()
+
+    if len(df) == 0:
+        return pd.DataFrame([], columns=["total_point_overlap", "bound_region_point_overlap", "n_overlap", "should_merge"])
+    
     df["should_merge"] = (
         (df["total_point_overlap"] >= total_point_overlap_threshold) &
         (df["bound_region_point_overlap"] >= bound_region_point_overlap_threshold) &
@@ -179,15 +183,14 @@ def cluster_merge(clustered: sql.DataFrame, cluster_columns: list[str], split_re
     """
 
     clustered = clustered.withColumn("cluster", F.col("cluster").cast("string"))
-
     cluster_bounds = _get_cluster_bounds(clustered, cluster_columns)
-
     overlap_pairs = _find_overlapping_pairs(cluster_bounds, cluster_columns)
 
+    if len(overlap_pairs) == 0:
+        return clustered
+
     stats_df = _compute_overlap_stats(data=clustered, split_regions=split_regions, cluster_cols=cluster_columns, pairs_df=overlap_pairs, minimum_members=min_members)
-
     should_merge_df = _should_merge(stats_df, bound_region_point_overlap_threshold, total_point_overlap_threshold, min_n_overlap)
-
     uf = _merge_clusters_union_find(should_merge_df)
 
     return _assign_new_clusters(uf, clustered)
